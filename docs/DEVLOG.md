@@ -726,7 +726,7 @@ python -m agent script --local --model qwen3:8b   # 换本地 Ollama 生成模�
 
 自检：`python -m pytest -q tests/unit/test_agent.py`（9 例，注入 fake LLM，不联网、不碰主库）。
 
-**首批实测（2026-11-15，云端 LLM）**：4 轮 smoke + 18 轮 default + 18 轮无记忆对照 + 修正提示词后 18 轮 v2 复测，全部 `exit 0`。基线 L2 采纳 18 条（10 条带 `used_ids` + `context_text`，回传原话 100%）、再巩固 7 条、会话 36 轮、0 伪造 id、0 标签泄露；A/B 里 5 个长期事实问题「无记忆答不出、接记忆准确答出」。当时初步判定的 P0 是「`events.search_text` 只在采纳→再巩固时写入」；**后续在干净主库 18 轮 + 6 组隔离实验里被推翻**——补齐 search_text、还原向量都改变不了召回，真正根因是 `recall.py` 的人物硬过滤误伤（详见 `data/main_run_diagnosis.json`）。首批逐轮回答见 `C:/Users/21839/WorkBuddy/神经记忆系统/NeuroMem-陪伴Agent真实使用报告-2026-11-15.md`。
+**首批实测（2026-11-15，云端 LLM）**：4 轮 smoke + 18 轮 default + 18 轮无记忆对照 + 修正提示词后 18 轮 v2 复测，全部 `exit 0`。基线 L2 采纳 18 条（10 条带 `used_ids` + `context_text`，回传原话 100%）、再巩固 7 条、会话 36 轮、0 伪造 id、0 标签泄露；A/B 里 5 个长期事实问题「无记忆答不出、接记忆准确答出」。当时初步判定的 P0 是「`events.search_text` 只在采纳→再巩固时写入」；**后续在干净主库 18 轮 + 6 组隔离实验里被推翻**——补齐 search_text、还原向量都改变不了召回，真正根因是 `recall.py` 的人物硬过滤误伤（详见 `data/main_run_diagnosis.json`）。首批逐轮回答见 `C:/Users/21839/WorkBuddy/神经记忆系统/Recollect-陪伴Agent真实使用报告-2026-11-15.md`。
 
 ### 召回冷启动修复（`RECALL_COLDSTART_FIX`）
 

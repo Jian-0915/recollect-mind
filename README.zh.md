@@ -9,7 +9,6 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 
 ---
 
-# NeuroMem
 
 一个从空白出发、会记、会联想、会召回的**成长型记忆系统**（MVP-1 原型）。
 
