@@ -112,7 +112,7 @@ brain.commit(pack, used_ids=[...], remember=[...])
 
 Honesty first: **there is no public benchmark number yet** (LoCoMo / LongMemEval are the next milestone, see Roadmap). What exists today is engineering verification:
 
-- **356 unit tests** across 98 test files (`pytest tests/unit`)
+- **364 unit tests**, all green on a fresh clone with no local database (`pytest tests/unit`)
 - an 8-question regression harness with expected-evidence checks (`tools/eval_regression.py`)
 - ~150 turns of real usage traces from the web channel, used to find and fix four recall bugs and one attribution bug (see [docs/DEVLOG.md](docs/DEVLOG.md))
 - ablation via `NEUROMEM_LLM_THINK=on`, `AGGREGATE_LAYER=0`, etc. — mechanisms are switchable, so they can be measured rather than asserted
@@ -124,7 +124,7 @@ neuromem/     memory core (store, recall, forgetting, reconsolidation, affect, a
 agent/        reference companion agent + prompts + trace
 tools/        MCP server, evaluation harnesses, probes, migrations
 web/          single-page management UI
-tests/        356 unit tests
+tests/        364 unit tests
 docs/         architecture notes and the development log
 ```
 
