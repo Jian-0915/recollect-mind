@@ -1,0 +1,43 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+# 注意：仓库名与发布名都用 Recollect；Python 导入名暂时仍是 neuromem
+# （改名要动全项目的 import，单独一次做）。发布前先在 PyPI 查一下这个名字是否可用。
+name = "recollect-memory"
+version = "0.21.0"
+description = "Long-term memory for conversations that knows whose memory it is"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Recollect contributors" }]
+keywords = ["llm", "agent", "memory", "mcp", "sqlite", "chinese", "long-term-memory"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "requests>=2.31",
+    "networkx>=3.2",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/your-name/recollect"
+Issues = "https://github.com/your-name/recollect/issues"
+
+[project.scripts]
+recollect = "neuromem.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["neuromem*", "agent*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

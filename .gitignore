@@ -1,0 +1,36 @@
+# ---- 数据与隐私：真实记忆、会话、trace 一律不进仓库 ----
+data/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.trace.jsonl
+
+# 本地备份（含旧库，体积大且是真实数据）
+backup*/
+backup-*/
+
+# 运行产物
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+*.log
+
+# 含真实对话的本地报告
+NeuroMem-主库真实对话测试报告-*.md
+*-主库真实对话测试报告-*.md
+
+# 配置（可能含密钥 / 端点）
+.env
+.env.*
+!.env.example
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

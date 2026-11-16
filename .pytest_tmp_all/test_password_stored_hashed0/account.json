@@ -1,0 +1,7 @@
+{
+  "username": "admin",
+  "salt": "h9+k4MDKDixelZFfoqdiSQ==",
+  "hash": "Awww+cWoq8gYOQi14mq0YRYySjSxkAPh14+lHxQB/GE=",
+  "iters": 200000,
+  "created_at": "2026-11-15T14:57:31+08:00"
+}
