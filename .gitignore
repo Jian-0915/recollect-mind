@@ -34,3 +34,7 @@ NeuroMem-主库真实对话测试报告-*.md
 Thumbs.db
 .idea/
 .vscode/
+
+# 测试临时目录
+.pytest_tmp*/
+.pytest_cache/

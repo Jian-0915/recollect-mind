@@ -1,8 +1,0 @@
-{
-  "username": "boss",
-  "salt": "Y0p6I9WAgqr/1VHAXtbfew==",
-  "hash": "oy2BJOj1dqZIaJb7t+Q64FOmvCslWegLRhjLqLDWLDQ=",
-  "iters": 200000,
-  "created_at": "2026-11-15T14:57:30+08:00",
-  "updated_at": "2026-11-15T14:57:31+08:00"
-}
