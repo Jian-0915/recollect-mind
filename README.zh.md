@@ -286,8 +286,8 @@ v12 的边界是「只立结构」：`"用户"` 常量仍在，`answer.py` 仍�
 ## 支持本项目
 
 如果 Recollect 帮到了你，Web 界面侧栏的「支持」页有收款二维码（作者自愿维护，功能完全免费）。
-二维码图片放在 `web/donate/`（文件名 `wechat.png` / `alipay.png` / `coffee.png`），且被 `.gitignore`
-排除，不会进公开仓库。
+二维码图片放在 `web/donate/`（文件名 `wechat.png` / `alipay.png` / `coffee.png`），
+会随仓库一起发布，别人 clone 后即可看到并支持作者。
 
 想贡献而不是打赏？提交 Issue、补充中文长对话测试用例、或写 benchmark 适配，
 对项目的价值更大 —— 详见下方 Contributing。

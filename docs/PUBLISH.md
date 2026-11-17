@@ -16,9 +16,11 @@ git grep -nE 'sk-[A-Za-z0-9]{20,}' -- ':!tests/*' || echo "OK: 无真实 Key"
 # 2) 确认数据库 / data / .env 都没被跟踪（应无输出）
 git ls-files | grep -E '(^|/)(data|backup|backups)/|\.db$|(^|\.env$)' || echo "OK: 无敏感文件被跟踪"
 
-# 3) 确认收款码图片不会被提交
-git check-ignore web/donate/wechat.png && echo "OK: 收款码已忽略"
+# 3) 确认收款码图片会被正常纳入版本控制（要让别人看到并转账）
+git check-ignore web/donate/wechat.png && echo "警告: 收款码被忽略了!" || echo "OK: 收款码可随仓库发布"
 ```
+
+> 收款码（`web/donate/*.png`）**故意不忽略**：它会随仓库发布，别人 clone 后能在「支持」页看到。
 
 > 你的 API Key 只在本机 `data/*.db`（DPAPI 加密），`data/` 与 `*.db` 均已 gitignore，
 > 不会随仓库发布。Web 里填的 Key、个人记忆、trace 同理。
@@ -65,7 +67,8 @@ git push -u origin HEAD
 ## 第 3 步：验证发布成功
 
 1. 刷新 GitHub 仓库页面，应能看到 README、LICENSE、代码目录。
-2. 检查文件列表里**没有** `data/`、`*.db`、`.env`、收款码图片。
+2. 检查文件列表里**没有** `data/`、`*.db`、`.env`（这些是隐私，绝不能上传）；
+   但**应该有** `web/donate/` 下的收款码图片（这是给别人转账用的，要保留）。
 3. 本地随便找台干净机器（或 `git clone` 到临时目录）跑一遍：
    ```bash
    git clone https://github.com/<你的用户名>/<仓库名>.git /tmp/recollect-check

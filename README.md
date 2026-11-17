@@ -159,7 +159,7 @@ Issues and PRs are welcome, especially: Chinese long-conversation test cases, at
 
 ## Support
 
-If Recollect has been useful, the web UI has a "Support" page with QR codes (entirely optional — all features are free). Drop your images into `web/donate/` (`wechat.png` / `alipay.png` / `coffee.png`); they are gitignored and won't enter the public repo. Prefer to contribute instead? Issues, Chinese long-conversation test cases, and benchmark adapters are worth far more — see Contributing above.
+If Recollect has been useful, the web UI has a "Support" page with QR codes (entirely optional — all features are free). QR images live in `web/donate/` (`wechat.png` / `alipay.png` / `coffee.png`) and are committed with the repo, so anyone who clones can see them. Prefer to contribute instead? Issues, Chinese long-conversation test cases, and benchmark adapters are worth far more — see Contributing above.
 
 ## License
 
