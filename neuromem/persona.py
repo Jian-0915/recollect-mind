@@ -4,14 +4,17 @@ import re
 import uuid
 from datetime import datetime, timezone
 
-from . import config, db, entity, llm
+from . import config, db, entity, llm, settings
 
-_PROFILE_PROMPT = """根据下面关于"{name}"的经历，写一段简明的人物画像（100字内）。
-包含：性格 / 喜好 / 重要关系 / 近况。用第三人称，不要编造经历里没有的内容。
-**必须用简体中文输出**：即使思考过程用了英文，最终这段画像也只能是中文。
+# v22：画像任务用强 JSON 契约。旧版是 269 字的裸文本 prompt，sensenova-flash
+# 会把它当成"写篇分析"，把 Thinking Process 写进 content 且吃光 max_tokens，
+# 真正的画像根本没生成（实测 400/1200 预算都一样）。JSON 契约实测 63 token
+# 就返回干净正文。注意 prompt 里不要再提"思考过程"四个字——那会诱导它写分析。
+_PROFILE_PROMPT = """你是画像生成器。严格按下面的 JSON 输出，不要输出任何其他文字、分析或思考过程。
+输出格式：{"portrait":"100字内的简体中文人物画像"}
+要求：第三人称；只依据关于"{name}"的经历；经历里没写的性格、喜好不要编造；字段 portrait 的值就是画像正文。
 经历：
-{events}
-只输出画像文字，不要解释。"""
+{events}"""
 
 _REL_WORDS = [
     "同事", "朋友", "同学", "家人", "爸爸", "妈妈", "儿子", "女儿", "夫妻",
@@ -159,8 +162,32 @@ def event_gists(conn, pid, limit=20):
     return [r["gist"] for r in rows]
 
 
+# 模型把推理当正文时的标志性开头。命中即拒，绝不能让它进库——画像会被
+# 后续召回喂回生成层，一次污染会反复发作。
+_THINK_LEAK = re.compile(
+    r"Thinking\s*Process|Analyze the (Provided |Input |Request)|"
+    r"Drafting the Portrait|Synthesize Information|"
+    r"^\s*\d+[\.\)]\s+\*\*|\*\*[^*]{2,40}\*\*\s*:",
+    re.I | re.M,
+)
+
+
+def _extract_portrait(raw):
+    """取 JSON 契约里的 portrait 字段；兼容非 JSON 的纯文本（老端点/测试 mock）。"""
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    try:
+        d = json.loads(s)
+    except (ValueError, TypeError):
+        return s
+    if isinstance(d, dict):
+        return str(d.get("portrait") or "").strip()
+    return s
+
+
 def _valid_profile(text):
-    """挡住模型的退化输出（"0000000000"、"。。。"、空串）。"""
+    """挡住退化输出（"0000000000"）与思考泄漏；画像必须是以中文为主的短文。"""
     t = (text or "").strip()
     if len(t) < 12:
         return False
@@ -168,7 +195,10 @@ def _valid_profile(text):
         return False
     if len(set(t)) <= 2:
         return False
-    return len(re.findall(r"[\u4e00-\u9fff]", t)) >= 8
+    if _THINK_LEAK.search(t):
+        return False
+    cn = len(re.findall(r"[\u4e00-\u9fff]", t))
+    return cn >= 12 and cn * 2 >= len(t)   # 中文至少占一半；推理文本通常英文居多
 
 
 def build_profile(conn, name):
@@ -182,11 +212,30 @@ def build_profile(conn, name):
         _PROFILE_PROMPT.replace("{name}", p["canonical_name"])
         .replace("{events}", "\n".join("- " + g for g in gists))
     )
+    # v22：主模型 + 强 JSON 契约；仍退化则换 lite 模型重试一次。
+    # 两者都失败才返回 None（接口据此报"画像生成失败"，留到下一轮重试）。
+    lite = None
     try:
-        text = llm.generate(prompt, model=config.ANSWER_MODEL, max_tokens=400, timeout=90).strip()
+        lite = (settings.current().get("llm") or {}).get("extract_model")
     except Exception:
-        return None
-    if not _valid_profile(text):
+        pass
+    attempts = [(config.ANSWER_MODEL, 600)]
+    if lite and lite != config.ANSWER_MODEL:
+        attempts.append((lite, 400))
+
+    text = None
+    for model, budget in attempts:
+        try:
+            got = _extract_portrait(
+                llm.generate(prompt, model=model, json_mode=True,
+                             max_tokens=budget, timeout=90)
+            )
+        except Exception:
+            continue
+        if _valid_profile(got):
+            text = got
+            break
+    if not text:
         return None
     n = conn.execute(
         "SELECT COUNT(*) FROM edges ed JOIN events e ON e.id=ed.source "

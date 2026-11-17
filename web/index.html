@@ -1515,11 +1515,37 @@ async function toggleThink(on){
   }
 }
 
+// 嵌入模型推荐：只填表、不自动保存；换维度会静默失效旧向量，填表时明确警告。
+// 商汤 Token Plan 网关无 embeddings 端点，故不在其中（用它的对话模型时保留本地嵌入）。
+const EMBED_RECOMMENDS = {
+  '本地·qwen3-embedding:4b（推荐，2560）': {provider:'ollama', useLocal:true, model:'qwen3-embedding:4b', dim:2560},
+  '本地·bge-large:latest（1024）': {provider:'ollama', useLocal:true, model:'bge-large:latest', dim:1024},
+  '通义·text-embedding-v3（1024）': {provider:'openai_compat', base:'https://dashscope.aliyuncs.com/compatible-mode/v1', model:'text-embedding-v3', dim:1024},
+  '硅基流动·bge-large-zh-v1.5（1024）': {provider:'openai_compat', base:'https://api.siliconflow.cn/v1', model:'BAAI/bge-large-zh-v1.5', dim:1024},
+  'OpenAI·text-embedding-3-small（1536）': {provider:'openai_compat', base:'https://api.openai.com/v1', model:'text-embedding-3-small', dim:1536},
+};
+
+function applyEmbedRecommend(name){
+  const r = EMBED_RECOMMENDS[name];
+  if(!r) return;
+  const set=(id,val)=>{const el=$(id); if(el) el.value=val;};
+  const base = r.useLocal ? ((SETTINGS_PRESETS.ollama||{}).base_url || 'http://127.0.0.1:11434') : r.base;
+  set('#embedProvider', r.provider); set('#embedBase', base);
+  set('#embedModel', r.model); set('#embedDim', r.dim);
+  const cur = (SETTINGS && SETTINGS.embed && SETTINGS.embed.dim) || 0;
+  const warn = cur && cur !== r.dim
+    ? `注意：当前库是 ${cur} 维，推荐项是 ${r.dim} 维。换维度后旧记忆检索会失效，需重建向量 / 清库重灌。`
+    : '';
+  $('#setResult').textContent = `已填入嵌入推荐「${name}」，记得点「保存并立即生效」。${warn}`;
+}
+
 async function renderSettings(){
   const d = await api('/api/settings');
   SETTINGS = d.settings; SETTINGS_PRESETS = d.presets || {};
   const btns = Object.keys(SETTINGS_PRESETS).map(k =>
     `<button class="act" onclick="applyPreset('${k}')">${k}</button>`).join('');
+  const embedBtns = Object.keys(EMBED_RECOMMENDS).map(k =>
+    `<button class="act" onclick="applyEmbedRecommend('${k}')">${k}</button>`).join('');
   $('#view').innerHTML = `
   <div class="panel"><span class="hint">预设</span>${btns}
     <span class="hint">点一下填表，再点「保存」</span></div>
@@ -1560,11 +1586,13 @@ async function renderSettings(){
         </select></label>
       <label>Base URL<input id="embedBase" autocomplete="off"></label>
       <label>API Key<input id="embedKey" type="password" autocomplete="new-password"></label>
-      <label>模型名<input id="embedModel" placeholder="bge-large:latest" autocomplete="off"></label>
-      <label>向量维度<input id="embedDim" placeholder="1024" autocomplete="off"></label>
+      <label>模型名<input id="embedModel" placeholder="qwen3-embedding:4b" autocomplete="off"></label>
+      <label>向量维度<input id="embedDim" placeholder="2560" autocomplete="off"></label>
     </form>
+    <div class="hint" style="margin-top:10px">嵌入模型推荐（点一下填表，再点下方「保存并立即生效」）：</div>
+    <div id="embedRecs" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
+    <div class="hint" style="margin-top:8px">切换嵌入模型必须维度一致，否则旧记忆无法被检索到；换维度后需重建向量（数据页清库重灌）。商汤 Token Plan 网关不提供 embedding，用它的对话模型时请保留本地嵌入。</div>
     <div style="margin-top:8px"><button class="act danger" onclick="clearKey('embed')">清除已保存 Key</button></div>
-    <div class="hint" style="margin-top:8px">切换嵌入模型必须维度一致，否则旧记忆无法被检索到。</div>
   </div>
 
   <div class="panel">
@@ -1577,6 +1605,7 @@ async function renderSettings(){
   <div id="setResult" class="result"></div>`;
   fillSettings(SETTINGS);
   warnKeyShape(SETTINGS);
+  const recBox = $('#embedRecs'); if(recBox) recBox.innerHTML = embedBtns;
 }
 
 function warnKeyShape(s){

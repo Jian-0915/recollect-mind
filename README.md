@@ -39,6 +39,24 @@ Two kinds of models are needed; each can be local or cloud (recommended combos a
 | LLM answer | generates replies and personas | `qwen3:8b` | stronger than extract, steadier |
 | Embedding | vectorizes memories; decides retrieval quality | `qwen3-embedding:4b` | **dimension must match the store (2560)** |
 
+> The embedding model is the **least safe thing to swap** in this system: changing the model or the
+> dimension makes old memories unretrievable, and cosine search silently truncates to the shorter
+> dimension without an error. Unless you are willing to clear and re-ingest the store, stick with local 4B.
+
+### Choosing an embedding model
+
+| Option | Model | Dim | Best for |
+|---|---|---|---|
+| **Local Ollama (recommended)** | `qwen3-embedding:4b` | 2560 | best Chinese memory retrieval, free, data stays local; this project's default |
+| Local Ollama | `bge-large:latest` | 1024 | weaker machines, faster/cheaper |
+| DashScope / Qwen | `text-embedding-v3` | 1024 | already on Alibaba Cloud, good Chinese, CN-direct |
+| SiliconFlow | `BAAI/bge-large-zh-v1.5` | 1024 | one key for both cloud LLM and embeddings |
+| OpenAI | `text-embedding-3-small` | 1536 | all-OpenAI stack, English/multilingual |
+
+In the web "Models" page, under "Embedding model", **click a recommendation to fill the form** (fill only, no auto-save), confirm, then click "Save & apply" and verify with "Test embedding". Changing dimension requires clearing and re-ingesting the store first.
+
+> SenseNova's Token Plan OpenAI-compatible gateway (`https://token.sensenova.cn/v1`) has **no embeddings endpoint**; its "Piccolo Embedding" belongs to a separate SenseCore API needing its own key/base_url. So when using SenseNova chat/extract models, keep embeddings on local Ollama — do not call `/embeddings` on the same base_url.
+
 ### Option A: local Ollama (free, no key — recommended to start)
 
 1. Install Ollama: https://ollama.com (Windows/macOS/Linux, next-next-finish).
