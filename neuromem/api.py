@@ -1099,12 +1099,6 @@ def live_reset():
     return live.reset()
 
 
-@app.get("/api/live/history")
-def live_history(limit: int = 60):
-    """陪伴会话历史，供桌面端启动时回填对话（只读，不写记忆）。"""
-    return live.history(limit)
-
-
 # ---------------- 数据管理：导出 / 清库 ----------------
 # 清库时保留的「配置 / 账号」表。其余业务表一律从 sqlite_master 动态枚举：
 # 以后再加机制表（版本链、采纳日志、会话、心境…）会自动纳入清库范围，

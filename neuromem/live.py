@@ -238,37 +238,3 @@ def reset():
     with _lock:
         _drop()
     return {"ok": True}
-
-
-def history(limit=60):
-    """取陪伴会话最近 N 条轮次，供桌面端启动时回填对话记录。
-
-    只读 conversation_turns，按时间倒序取再翻正。speaker 保持库里原值，
-    前端按 role 判断气泡左右；agent 侧固定标成 'agent'。
-    """
-    from . import db, companion as comp
-    limit = max(1, min(int(limit or 60), 300))
-    # companion 写库时 agent 侧的 speaker 常量
-    agent_name = getattr(comp, "AGENT_NAME", None) or "agent"
-    c = db.connect()
-    try:
-        rows = c.execute(
-            "SELECT speaker, text, ts FROM conversation_turns "
-            "WHERE session_id='live_web' AND text IS NOT NULL AND text<>'' "
-            "ORDER BY created_at DESC, rowid DESC LIMIT ?", (limit,)
-        ).fetchall()
-        out = []
-        for r in reversed(rows):
-            sp = r["speaker"] or ""
-            out.append({
-                "role": "agent" if sp == agent_name else "user",
-                "text": r["text"],
-                "speaker": sp,
-                "ts": r["ts"] or "",
-            })
-        return {"ok": True, "turns": out, "count": len(out)}
-    except Exception as e:
-        return {"ok": False, "error": "%s: %s" % (type(e).__name__, str(e)[:200]),
-                "turns": [], "count": 0}
-    finally:
-        c.close()

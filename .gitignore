@@ -46,6 +46,10 @@ tests/*.py
 # 作者自用的发布操作手册（本地保留，不进公开仓库）
 docs/PUBLISH.md
 
+# 桌面端（阿澈）：本地功能，暂不进公开仓库
+desktop/
+start_desktop.bat
+
 # 测试临时目录
 .pytest_tmp*/
 .pytest_cache/
