@@ -63,6 +63,11 @@ PRESETS = {
                "timeout": config.EMBED_TIMEOUT},
     "deepseek": {"provider": "openai_compat", "base_url": "https://api.deepseek.com",
                  "extract_model": "deepseek-chat", "answer_model": "deepseek-chat"},
+    # 商汤日日新（SenseNova Token Plan）：作者自用组合。
+    # 抽取用 flash-lite（快、便宜、积分消耗低），对话用 flash（生成更稳）。
+    "sensenova": {"provider": "openai_compat", "base_url": "https://token.sensenova.cn/v1",
+                  "extract_model": "sensenova-6.8-flash-lite",
+                  "answer_model": "sensenova-6.8-flash"},
     "qwen": {"provider": "openai_compat",
              "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
              "extract_model": "qwen-plus", "answer_model": "qwen-max",

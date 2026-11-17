@@ -25,7 +25,7 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 两种用法任选其一：
 
 1. **本地 Ollama（无需 Key，推荐先用）**：安装 Ollama 并 pull 下列模型，开箱即用。
-2. **云端 OpenAI 兼容端点（DeepSeek / 通义 / Moonshot / OpenAI 等）**：在 Web「模型」页选预设或手填
+2. **云端 OpenAI 兼容端点（商汤 SenseNova / DeepSeek / 通义 / Moonshot / OpenAI 等）**：在 Web「模型」页选预设或手填
    base_url、模型名，并填入**你自己的 API Key**。Key 只留在你本机。
 
 > 想用环境变量预置模型名（不写 Key）：复制 `.env.example` 为 `.env`，改对应 `NEUROMEM_*` 值即可。
@@ -63,16 +63,28 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 | 平台 | 申请 Key（控制台） | base_url | 推荐模型（抽取 / 回答） | 备注 |
 |---|---|---|---|---|
 | **DeepSeek**（推荐） | https://platform.deepseek.com | `https://api.deepseek.com` | `deepseek-chat` / `deepseek-chat` | 国内直连、便宜，注册有额度 |
+| **商汤日日新 SenseNova**（作者自用） | https://platform.sensenova.cn | `https://token.sensenova.cn/v1` | `sensenova-6.8-flash-lite` / `sensenova-6.8-flash` | 国内直连；注册送积分，Flash-Lite 有专属积分池 |
 | 通义千问（阿里百炼） | https://bailian.console.aliyun.com | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | 稳定，新用户有免费额度 |
 | 月之暗面 Moonshot | https://platform.moonshot.cn | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | Kimi 系列 |
 | 硅基流动 | https://cloud.siliconflow.cn | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` / `Qwen/Qwen2.5-72B-Instruct` | 一个 Key 试多种模型，有免费模型 |
 | OpenAI | https://platform.openai.com/api-keys | `https://api.openai.com/v1` | `gpt-4o-mini` / `gpt-4o-mini` | 需海外网络与支付方式 |
 
+**作者自用的模型搭配（商汤日日新）** —— 本项目实际调校用的组合，可直接照抄：
+
+| 用途 | 模型 ID | 说明 |
+|---|---|---|
+| 抽取模型（extract） | `sensenova-6.8-flash-lite` | 快、积分消耗低，负责把对话提炼成结构化记忆 |
+| 对话模型（answer） | `sensenova-6.8-flash` | 生成回答与人物画像更稳 |
+
+在 Web「模型」页点 `sensenova` 预设，会自动填好 base_url 和这两个模型名，只需粘贴**自己的 Key**。
+Key 在 https://platform.sensenova.cn 控制台 → 「API Keys」创建（`sk-` 开头）。
+
 > Key 获取通用步骤：注册账号 → 进控制台「API Keys / API 密钥」页 → 创建并复制（通常只显示一次，务必当场保存）。
 > 平台名 / 模型 ID 可能随时间调整，以各平台控制台当前显示为准；报错 `model not found` 时去模型列表页复制准确 ID。
 
-**推荐组合**：入门用「本地 Ollama 全家桶」零成本跑通；要更强生成质量用「DeepSeek 抽取 + 回答」
-（一个 Key 搞定，最省事）。嵌入模型建议始终用本地 4B，避免云端嵌入的维度与费用问题。
+**推荐组合**：入门用「本地 Ollama 全家桶」零成本跑通；要更强生成质量，用
+「`sensenova-6.8-flash-lite` 抽取 + `sensenova-6.8-flash` 对话」（作者自用、国内直连、一个 Key 搞定），
+或「DeepSeek 抽取 + 回答」。嵌入模型建议始终用本地 4B，避免云端嵌入的维度与费用问题。
 
 ## 依赖
 

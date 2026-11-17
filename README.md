@@ -23,7 +23,7 @@ Recollect is a memory layer that treats these as first-class problems, on top of
 Pick one of two setups:
 
 1. **Local Ollama (no key, recommended to start):** install Ollama, pull the models below, and it just works.
-2. **Cloud OpenAI-compatible endpoint (DeepSeek / DashScope / Moonshot / OpenAI, etc.):** in the web "Models" page pick a preset or enter base_url + model names, then paste **your own API key**. The key stays on your machine only.
+2. **Cloud OpenAI-compatible endpoint (SenseNova / DeepSeek / DashScope / Moonshot / OpenAI, etc.):** in the web "Models" page pick a preset or enter base_url + model names, then paste **your own API key**. The key stays on your machine only.
 
 > To preset model names via env (never the key): copy `.env.example` to `.env` and edit the `NEUROMEM_*` values. Real environment variables take precedence over `.env` (handy for CI/tests). `.env` itself is gitignored.
 
@@ -59,14 +59,24 @@ In the web "Models" page click a preset (it fills base_url + model names), then 
 | Provider | Get a key (console) | base_url | Recommended (extract / answer) | Notes |
 |---|---|---|---|---|
 | **DeepSeek** (recommended) | https://platform.deepseek.com | `https://api.deepseek.com` | `deepseek-chat` / `deepseek-chat` | fast, cheap, free credits on signup |
+| **SenseNova (SenseTime)** (author's own) | https://platform.sensenova.cn | `https://token.sensenova.cn/v1` | `sensenova-6.8-flash-lite` / `sensenova-6.8-flash` | CN-direct; signup credits, dedicated Flash-Lite credit pool |
 | DashScope / Qwen | https://bailian.console.aliyun.com | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | stable, new-user credits |
 | Moonshot | https://platform.moonshot.cn | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | Kimi series |
 | SiliconFlow | https://cloud.siliconflow.cn | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` / `Qwen/Qwen2.5-72B-Instruct` | try many models with one key, free tier |
 | OpenAI | https://platform.openai.com/api-keys | `https://api.openai.com/v1` | `gpt-4o-mini` / `gpt-4o-mini` | needs overseas network + payment |
 
+**The author's own setup (SenseNova)** — the combo this project was tuned with; copy it as-is:
+
+| Role | Model ID | Why |
+|---|---|---|
+| Extract | `sensenova-6.8-flash-lite` | fast, low credit cost; turns dialogue into structured memories |
+| Answer | `sensenova-6.8-flash` | steadier replies and persona generation |
+
+In the web "Models" page click the `sensenova` preset — it fills base_url and both model names; you only paste **your own key**. Create one at https://platform.sensenova.cn → console → "API Keys" (`sk-` prefix).
+
 > Getting a key, generally: sign up → open the console's "API Keys" page → create and copy it (usually shown once — save it immediately). Provider names and model IDs change over time; trust what the console shows. If you get `model not found`, copy the exact ID from the provider's model list.
 
-**Recommended combos**: start with the full local-Ollama stack (zero cost). For stronger generation, use DeepSeek for both extract + answer (one key, simplest). Keep the embedding model local 4B to avoid dimension mismatches and cloud embedding cost.
+**Recommended combos**: start with the full local-Ollama stack (zero cost). For stronger generation, use `sensenova-6.8-flash-lite` for extract + `sensenova-6.8-flash` for answer (the author's own setup, one key, CN-direct), or DeepSeek for both. Keep the embedding model local 4B to avoid dimension mismatches and cloud embedding cost.
 
 ---
 

@@ -1300,10 +1300,14 @@ let chatHistory = [];
 let proactiveOn = true;          // 主动关怀开关；关掉后不再拉取、也不展示
 let proactiveTimer = null;
 
+// proactive id 是字符串（pro_xxx），直接拼进 onclick 会被 JS 当成变量名 → 点击报 ReferenceError，表现就是"没反应"
+function jsAttr(v){ return esc(JSON.stringify(String(v==null?'':v))); }
+
 function messageHTML(m){
   if(m.role==='proactive'){
+    const pid = jsAttr(m.proactiveId);
     return `<div class="msg proactive"><span class="pflag">它主动想起你</span>${esc(m.text)}
-      <div class="pc-act"><button onclick="proactiveReply(${m.proactiveId})">回应它</button><button onclick="proactiveDismiss(${m.proactiveId})">忽略</button></div></div>`;
+      <div class="pc-act"><button onclick="proactiveReply(${pid})">回应它</button><button onclick="proactiveDismiss(${pid})">忽略</button></div></div>`;
   }
   if(m.role==='thinking'){
     return `<div class="msg thinking">它在想…</div>`;
