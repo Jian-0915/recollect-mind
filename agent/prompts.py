@@ -156,16 +156,51 @@ def _ago_text(hours):
     return "几小时前"
 
 
+def _now_block(now=None):
+    """当前日期/星期/时段锚点：让陪伴生成对「今天/昨天/上周」有真实依据。
+
+    写入层 store._EXTRACT_PROMPT 和问答层 answer._PROMPT 都注入了「今天是 {today}」，
+    唯独陪伴生成层没有——模型只能照抄记忆里的相对时间词，却不知道今天几号。
+    这里补上同一个锚点。now 可注入以便测试；默认取本机当前时间（带时区）。
+    """
+    try:
+        from datetime import datetime
+        d = now or datetime.now().astimezone()
+        wd = "星期" + "一二三四五六日"[d.weekday()]
+        h = d.hour
+        if 5 <= h < 11:
+            period = "上午"
+        elif 11 <= h < 13:
+            period = "中午"
+        elif 13 <= h < 18:
+            period = "下午"
+        elif 18 <= h < 22:
+            period = "晚上"
+        else:
+            period = "深夜"
+        return (
+            "【现在的时间（判断「今天/昨天/上周/明天」一律以此为准）】\n"
+            "当前日期：%s（%s），%s。\n"
+            "记忆条目开头的 [日期] 是**事情发生的日期**（「记于」表示没有明确发生日期、按写入日计）。\n"
+            "对方说「今天 / 昨晚 / 上周 / 这两天 / 明天」时，用这个当前日期换算成具体日期，"
+            "再去对记忆里的 [日期]；不要因为措辞不同就说记不清，也不要把更早的事说成今天的。"
+            % (d.strftime("%Y-%m-%d"), wd, period))
+    except Exception:
+        return ""
+
+
 def build_prompt(pack, user_text, history, counterpart="用户",
-                  fact_guard=False):
-    """接记忆的正式通道：身份 → 候选 → 状态 → 最近对话 → 本轮输入。
+                 fact_guard=False, now=None):
+    """接记忆的正式通道：身份 → 时间 → 候选 → 状态 → 最近对话 → 本轮输入。
 
     fact_guard=True 时切换到带 claims 的契约与「禁止补充细节」硬规则，
     专供 A/B 隔离变量；默认 False 保持旧提示词一字不变。
+    now 可注入当前时间（测试用）；None 时取本机时间。
     """
     ctx = pack.render() if pack is not None else ""
     return "\n\n".join([
         SYSTEM_GUARDED if fact_guard else SYSTEM,
+        _now_block(now),
         "【本轮大脑上下文（候选未采用，需自己判断）】\n" + ctx,
         "【刚才的对话（用来理解指代、承接语气；不是回答概括性问题的依据）】\n"
         + _history_text(history),
@@ -176,14 +211,16 @@ def build_prompt(pack, user_text, history, counterpart="用户",
 
 
 def build_prompt_no_brain(identity_block, user_text, history, counterpart="用户",
-                          persona_block=""):
+                          persona_block="", now=None):
     """对照组：同一份 L0 + 最近原文，但没有候选记忆、情绪、关系与插件。
 
     v14：人设段自带宪法底线，设置后人设整体替代单独的 identity_block，
     保证 A/B 两边拿到完全相同的人格设定（公平对照的前提）。
+    now 可注入当前时间（测试用）；None 时取本机时间。
     """
     return "\n\n".join([
         NO_BRAIN_SYSTEM,
+        _now_block(now),
         persona_block or identity_block or "（固定身份未设定）",
         "【最近对话原文】\n" + _history_text(history),
         "【%s本轮说】%s" % (counterpart, user_text),

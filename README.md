@@ -148,6 +148,22 @@ conversation turn
       └─► trace (latency, candidates, used_ids, think tokens)
 ```
 
+## Person-to-person relations: extraction limits & manual entry
+
+A "relation" (A —relation→ B, with strength and evidence) lives in its own `relations` table. It is **distinct** from a `personas` card and from `edges.involves` (an event mentioning a person). Remembering someone, having their portrait, and even 200 events involving them does **not** imply a person-to-person link exists — that line is separate data.
+
+**How relations are made** (automatically, right after an event is written, in `store.py`):
+
+- ✅ **Auto-linked**: sentences with a judgment structure — "I have a friend named Lin Wan", "Zhou Ye was my mentor when I joined", "Zhiwei runs the B&B". Per-sentence LLM extraction plus a local pattern fallback.
+- ❌ **Missed**: plain statements where the relation word appears but there is no "X is / is with Y's <relation>" structure — e.g. "my cousin says he works even later than I do", "my older sister studied abroad in the UK; she said it rains a lot there". Neither the model nor the rules classify these as relations.
+- Measured: after clearing all 8 stored relations and replaying their source sentences, auto-extraction recovered **6/8** — the two misses were exactly the plain statements above. Relation extraction is therefore **semi-automatic**, not fully automatic.
+
+**This is a capability boundary, not a bug.** Name resolution works: saying "I'm Amu" resolves correctly to the counterpart (both `resolve_persona('Amu')` and "you" point to the same entity), so it never links to the wrong person — it just can't parse the relation inside those statement-style sentences yet.
+
+**When to add manually**: if you mentioned someone but no line appeared under the **Relations** tab, add it there — pick A and B, enter the relation word (e.g. `cousin`), click "Add relation". Existing relations can be edited or deleted there too. This is the standard fix for missed statements; there's no need to repeat the sentence.
+
+**Other notes**: relations need textual evidence — model-invented ones are rejected by a hard check. Generic terms ("friend/coworker/roommate") don't create named people unless a person of that name already exists.
+
 ## Quick start
 
 Requires Python 3.11+. The default setup uses [Ollama](https://ollama.com) locally (no API key needed); you can point the chat/embedding models at any OpenAI-compatible endpoint in the web UI using your own key. Model names are configurable via `.env` — see [Clean public build](#clean-public-build--api-keys).

@@ -176,6 +176,9 @@
   .livebar .dot.on{background:#3ec98a}
   .livebar .dot.off{background:#c96b3e}
   .msg .meta{font-size:11px;color:var(--acc);margin-top:6px;opacity:.9}
+  .msg .ts{font-size:10px;color:var(--fg-3);opacity:.7;margin-top:5px;
+    font-variant-numeric:tabular-nums}
+  .msg.user .ts{text-align:right}
   .msg .remember{font-size:12px;color:var(--fg-2);border-left:2px solid rgba(62,201,138,.55);
     padding:4px 10px;margin:6px 0;line-height:1.6}
   .msg.thinking{background:transparent;border:1px dashed var(--line);color:var(--fg-2);
@@ -1308,11 +1311,18 @@ let proactiveTimer = null;
 // proactive id 是字符串（pro_xxx），直接拼进 onclick 会被 JS 当成变量名 → 点击报 ReferenceError，表现就是"没反应"
 function jsAttr(v){ return esc(JSON.stringify(String(v==null?'':v))); }
 
+// 消息时间戳（浏览器本地时间，仅前端展示）。带日期，跨天也能看清。
+function fmtMsgTs(d){
+  const p=n=>String(n).padStart(2,'0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function tsLine(m){ return m.ts ? `<div class="ts">${esc(m.ts)}</div>` : ''; }
+
 function messageHTML(m){
   if(m.role==='proactive'){
     const pid = jsAttr(m.proactiveId);
     return `<div class="msg proactive"><span class="pflag">它主动想起你</span>${esc(m.text)}
-      <div class="pc-act"><button onclick="proactiveReply(${pid})">回应它</button><button onclick="proactiveDismiss(${pid})">忽略</button></div></div>`;
+      <div class="pc-act"><button onclick="proactiveReply(${pid})">回应它</button><button onclick="proactiveDismiss(${pid})">忽略</button></div>${tsLine(m)}</div>`;
   }
   if(m.role==='thinking'){
     return `<div class="msg thinking">它在想…</div>`;
@@ -1322,10 +1332,10 @@ function messageHTML(m){
     const rem = (m.remembered && m.remembered.length)
       ? `<div class="remember">牢记：${m.remembered.map(esc).join('；')}</div>` : '';
     const hits = m.hits ? m.hits.map(h=>`<div class="hit">${esc(h)}</div>`).join('') : '';
-    return `<div class="msg bot"><b>NeuroMem：</b>${esc(m.text)}${rem}${hits}${meta}</div>`;
+    return `<div class="msg bot"><b>NeuroMem：</b>${esc(m.text)}${rem}${hits}${meta}${tsLine(m)}</div>`;
   }
   const who = m.role==='user'?'你：':'NeuroMem：';
-  return `<div class="msg ${m.role}"><b>${who}</b>${esc(m.text)}</div>`;
+  return `<div class="msg ${m.role}"><b>${who}</b>${esc(m.text)}${tsLine(m)}</div>`;
 }
 
 // 通道状态：把"它记得多少"摆在对话上方，机制不藏在后台
@@ -1378,7 +1388,7 @@ async function pollProactive(){
     const r = await api('/api/proactive');
     if(r && r.ok && r.available && r.text){
       if(!chatHistory.some(m=>m.role==='proactive' && m.proactiveId===r.id)){
-        chatHistory.push({role:'proactive', text:r.text, proactiveId:r.id, topic:r.topic});
+        chatHistory.push({role:'proactive', text:r.text, proactiveId:r.id, topic:r.topic, ts:fmtMsgTs(new Date())});
         const box=$('#view'); if(box && $('#chatbox')){ box.innerHTML = renderChat(); const c=$('#chatbox'); if(c) c.scrollTop=c.scrollHeight; }
       }
     }
@@ -1415,7 +1425,7 @@ async function doAsk(){
   if(!q) return;
   if(liveMode) return doLive(q);        // 默认走真记忆通道
   const name = (($('#askName')||{}).value)||'用户';
-  chatHistory.push({role:'user', text:q});
+  chatHistory.push({role:'user', text:q, ts:fmtMsgTs(new Date())});
   $('#view').innerHTML = renderChat();
   toast('检索与生成中…');
   const t0 = Date.now();
@@ -1430,7 +1440,7 @@ async function doAsk(){
   });
   const warn = (r.warnings || []).join('\n');
   const botText = (r.summary || '（没有找到相关记忆）') + (warn ? '\n\n⚠ ' + warn : '');
-  chatHistory.push({role:'bot', text: botText, hits});
+  chatHistory.push({role:'bot', text: botText, hits, ts:fmtMsgTs(new Date())});
   const dt = ((Date.now()-t0)/1000).toFixed(1);
   toast(`只读查询 · ${dt}s · 命中 ${(r.events||[]).length} 条 · 未写入`);
   $('#view').innerHTML = renderChat();
@@ -1444,7 +1454,7 @@ async function doLive(q){
   if(liveBusy){ toast('上一句还在想，等它答完'); return; }
   liveBusy = true;
   chatHistory = chatHistory.filter(m=>m.role!=='thinking');
-  chatHistory.push({role:'user', text:q});
+  chatHistory.push({role:'user', text:q, ts:fmtMsgTs(new Date())});
   chatHistory.push({role:'thinking'});
   $('#view').innerHTML = renderChat();
   let bx=$('#chatbox'); if(bx) bx.scrollTop = bx.scrollHeight;
@@ -1457,10 +1467,10 @@ async function doLive(q){
   chatHistory = chatHistory.filter(m=>m.role!=='thinking');
   if(!r || !r.ok){
     chatHistory.push({role:'bot',
-      text:'（这轮没走通）'+(r&&r.error?('\n'+r.error):'')+(r&&r.hint?('\n'+r.hint):'')});
+      text:'（这轮没走通）'+(r&&r.error?('\n'+r.error):'')+(r&&r.hint?('\n'+r.hint):''), ts:fmtMsgTs(new Date())});
   }else{
     chatHistory.push({role:'bot', text:r.reply||'（它没说话）',
-                      meta:r.hint||'', remembered:r.remembered||[]});
+                      meta:r.hint||'', remembered:r.remembered||[], ts:fmtMsgTs(new Date())});
   }
   liveBusy = false;
   const dt = ((Date.now()-t0)/1000).toFixed(1);
