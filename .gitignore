@@ -37,6 +37,15 @@ Thumbs.db
 
 # 收款二维码需随仓库发布，故 web/donate/ 下的图片不忽略。
 
+# 开发期一次性脚本（诊断/数据修复/压测）：本地保留，不进公开仓库。
+# tests/ 顶层只保留 test_*.py 与 conftest.py；tests/unit/ 子目录不受影响。
+tests/*.py
+!tests/test_*.py
+!tests/conftest.py
+
+# 作者自用的发布操作手册（本地保留，不进公开仓库）
+docs/PUBLISH.md
+
 # 测试临时目录
 .pytest_tmp*/
 .pytest_cache/
