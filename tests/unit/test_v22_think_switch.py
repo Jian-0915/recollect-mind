@@ -233,6 +233,34 @@ def test_openai_message_uses_stripper():
     assert content == "好的，我记住了。"
 
 
+# ---------------- v22.1：孤立 </think> 泄漏（自我叙事实测形态） ----------------
+def test_strip_orphan_closing_think_tag():
+    from neuromem.llm import strip_think_wrapper
+    s = ("用户希望我以陪伴者的身份写一段自述。接下来分析经历内容：\n"
+         "1. \"我们大学就认识了\" - 强调关系历史悠久。\n\n"
+         "最后检查是否遗漏关键点：大学认识、微服务。确保没有添加额外内容。"
+         "</think>我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
+         "但每次一起讨论技术都让我觉得踏实。")
+    assert strip_think_wrapper(s) == (
+        "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
+        "但每次一起讨论技术都让我觉得踏实。")
+
+
+def test_orphan_close_without_body_becomes_empty():
+    from neuromem.llm import strip_think_wrapper
+    assert strip_think_wrapper("分析经历内容…确保没有额外内容。</think>") == ""
+
+
+def test_narrative_leak_rejected():
+    from neuromem import selfnarrative
+    bad = ("用户希望我以陪伴者的身份，基于提供的经历写一段自述。首先需要确认身份定位。"
+           "接下来分析经历内容：1. 大学认识。最后检查是否遗漏关键点。我是你的老朋友，"
+           "从大学起就陪在你身边，一起讨论技术让我觉得踏实。")
+    good = "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，但每次一起讨论技术都让我觉得踏实。"
+    assert selfnarrative._valid_narrative(bad) is False
+    assert selfnarrative._valid_narrative(good) is True
+
+
 # ---------------- 正文里混进来的思考（"生成一堆英文"） ----------------
 def test_strip_thinking_tag_block():
     from neuromem.llm import strip_think_wrapper
@@ -267,3 +295,31 @@ def test_openai_message_uses_stripper():
         "content": "<thinking>plan in english</thinking>好的，我记住了。"}}]}
     content, _ = _openai_message(data)
     assert content == "好的，我记住了。"
+
+
+# ---------------- v22.1：孤立 </think> 泄漏（自我叙事实测形态） ----------------
+def test_strip_orphan_closing_think_tag():
+    from neuromem.llm import strip_think_wrapper
+    s = ("用户希望我以陪伴者的身份写一段自述。接下来分析经历内容：\n"
+         "1. \"我们大学就认识了\" - 强调关系历史悠久。\n\n"
+         "最后检查是否遗漏关键点：大学认识、微服务。确保没有添加额外内容。"
+         "</think>我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
+         "但每次一起讨论技术都让我觉得踏实。")
+    assert strip_think_wrapper(s) == (
+        "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
+        "但每次一起讨论技术都让我觉得踏实。")
+
+
+def test_orphan_close_without_body_becomes_empty():
+    from neuromem.llm import strip_think_wrapper
+    assert strip_think_wrapper("分析经历内容…确保没有额外内容。</think>") == ""
+
+
+def test_narrative_leak_rejected():
+    from neuromem import selfnarrative
+    bad = ("用户希望我以陪伴者的身份，基于提供的经历写一段自述。首先需要确认身份定位。"
+           "接下来分析经历内容：1. 大学认识。最后检查是否遗漏关键点。我是你的老朋友，"
+           "从大学起就陪在你身边，一起讨论技术让我觉得踏实。")
+    good = "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，但每次一起讨论技术都让我觉得踏实。"
+    assert selfnarrative._valid_narrative(bad) is False
+    assert selfnarrative._valid_narrative(good) is True

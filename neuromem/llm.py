@@ -143,6 +143,12 @@ _THINK_BLOCK = re.compile(
 _THINK_LEAD = re.compile(
     r"^\s*(thinking process|reasoning process|reasoning|思考过程|推理过程)\s*[:：]\s*",
     re.I)
+# 实测 v22.1：sensenova 在短 prompt（自我叙事/画像）上会输出**只有闭合标签**的
+# 思考块——正文在前、</think> 在后，没有 <think> 开头。成对正则匹配不到，
+# 整段英文思考就留在正文里（自我叙事 581 字全是思考+正文混排）。
+# 这种形态一律取 </think> 之后的文字；没有闭合标签的正常回答不受影响。
+_ORPHAN_THINK_CLOSE = re.compile(
+    r"</(think|thinking|reasoning|analysis|thought)>\s*", re.I)
 
 
 def strip_think_wrapper(text):
@@ -155,6 +161,10 @@ def strip_think_wrapper(text):
     剥完若为空，调用方会走既有的降级重试，不会把半截英文当结果。
     """
     out = _THINK_BLOCK.sub("", str(text or "")).strip()
+    # 孤立闭合标签（无 <think> 开头）：取标签之后的正文。
+    m_close = _ORPHAN_THINK_CLOSE.search(out)
+    if m_close:
+        out = out[m_close.end():].strip()
     m = _THINK_LEAD.match(out)
     if m:
         rest = out[m.end():]

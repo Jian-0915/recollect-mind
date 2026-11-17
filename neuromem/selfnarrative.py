@@ -11,17 +11,23 @@ v13 主体翻转前的坑：这里默认「取事件最多的人物」当叙事�
   但结果标 scope='counterpart'，上层（Brain / format_block）明确知道
   它**不是我的人格**，只作关于对方的背景，不注入第一人称上下文。
 """
+import re
 from datetime import datetime, timezone
 
-from . import config, identity, llm
+from . import config, identity, llm, settings
 
-_PROMPT = """固定身份（不可更改）：{who}
-根据下面关于「{scope_label}」的经历，用第一人称写一段自述（100字内）。
+# v22.1：与画像同款强 JSON 契约。旧版裸 prompt + 400 token 会让 sensenova-flash
+# 把"用户希望我…接下来分析经历…"整段思考写进 content（实测 581 字里思考占 456 字），
+# 且它只有 </think> 没有 <think>，成对的剥离逻辑也接不住。JSON 契约实测 87 token
+# 就返回干净自述。注意 prompt 里不要出现"思考过程"字样——那会诱导模型写分析。
+_PROMPT = """你是自我叙事生成器。严格按下面的 JSON 输出，不要输出任何其他文字、分析或思考过程。
+输出格式：{"text":"100字内的简体中文第一人称自述"}
+固定身份（不可更改）：{who}
+根据下面关于「{scope_label}」的经历写自述。
 {scope_rule}
-不要编造经历里没有的内容，不要输出 "Thinking Process" 之类的过程说明或解释。
+不要编造经历里没有的内容；字段 text 的值就是自述正文。
 经历：
-{events}
-只输出自述文字，不要解释。"""
+{events}"""
 
 _SCOPE = {
     "self": (
@@ -33,6 +39,29 @@ _SCOPE = {
         "只写我陪对方经历过什么、我对对方的了解；不要把对方的经历写成我自己的经历。",
     ),
 }
+
+
+# 思考泄漏的标志：用户输入复述、分析编号、残留闭合标签。命中即拒，
+# 绝不能让它落库后被 Brain 当成人格注入（一次污染会反复发作）。
+_LEAK = re.compile(
+    r"</?(think|thinking|reasoning|analysis|thought)>|"
+    r"用户希望我|接下来分析|首先.{0,8}确认|然后整合|最后检查|"
+    r"^\s*\d+[\.\)]\s+\"|注意语言要",
+    re.I | re.M,
+)
+
+
+def _valid_narrative(text):
+    t = (text or "").strip()
+    if not t or len(set(t)) <= 2:
+        return False
+    if _LEAK.search(t):
+        return False
+    if len(t) >= 12:   # 够长才查语言占比；短文本（测试 mock / 占位）放行
+        cn = len(re.findall(r"[\u4e00-\u9fff]", t))
+        if cn < 12 or cn * 2 < len(t):
+            return False
+    return True
 
 
 def _now():
@@ -96,11 +125,33 @@ def build(conn, user_name=None, *, subject_scope=None, allow_fallback=True):
               .replace("{scope_label}", label)
               .replace("{scope_rule}", rule)
               .replace("{events}", "\n".join("- " + g for g in gists)))
+    # 主模型 + JSON 契约；仍退化则换 lite 模型重试一次（与画像同策略）
+    lite = None
     try:
-        text = llm.generate(prompt, model=config.ANSWER_MODEL,
-                            max_tokens=400, timeout=90).strip()
+        lite = (settings.current().get("llm") or {}).get("extract_model")
     except Exception:
-        return None
+        pass
+    attempts = [(config.ANSWER_MODEL, 600)]
+    if lite and lite != config.ANSWER_MODEL:
+        attempts.append((lite, 400))
+
+    text = None
+    for model, budget in attempts:
+        try:
+            raw = llm.generate(prompt, model=model, json_mode=True,
+                               max_tokens=budget, timeout=90)
+            s = str(raw or "").strip()
+            try:
+                import json as _json
+                obj = _json.loads(s)
+                got = str(obj.get("text") or "").strip() if isinstance(obj, dict) else s
+            except (ValueError, TypeError):
+                got = s          # 兼容非 JSON 的纯文本（测试 mock / 老端点）
+        except Exception:
+            continue
+        if _valid_narrative(got):
+            text = got
+            break
     if not text:
         return None
     conn.execute(

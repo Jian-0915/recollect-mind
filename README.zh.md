@@ -46,17 +46,22 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 
 ### 嵌入模型怎么选（推荐）
 
+> 下面推荐的模型**全部支持 2560 维输出**，与本项目默认库一致；
+> `dimensions` 参数由系统自动随请求发送，若端点不支持会自动降级。**维度相同不代表向量空间相同**——
+> 换模型后旧记忆仍建议重建向量 / 清库重灌，检索质量才可靠。
+
 | 方案 | 模型 | 维度 | 适合场景 |
 |---|---|---|---|
-| **本地 Ollama（推荐）** | `qwen3-embedding:4b` | 2560 | 中文记忆检索最好、免费、数据不出本机；本项目默认 |
-| 本地 Ollama | `bge-large:latest` | 1024 | 机器较弱、追求更快更省资源 |
-| 通义千问 | `text-embedding-v3` | 1024 | 已在用阿里百炼，中文好、国内直连 |
-| 硅基流动 | `BAAI/bge-large-zh-v1.5` | 1024 | 一个 Key 同时用云端 LLM 与嵌入 |
-| OpenAI | `text-embedding-3-small` | 1536 | 全 OpenAI 技术栈、英文/多语言 |
+| **本地 Ollama（推荐）** | `qwen3-embedding:4b` | 2560（原生） | 中文记忆检索最好、免费、数据不出本机；本项目默认 |
+| 本地 Ollama | `qwen3-embedding:8b` | 2560（截断） | MTEB 榜首，检索质量最高，机器资源充足时选 |
+| 硅基流动 | `Qwen/Qwen3-Embedding-4B` | 2560 | 一个 Key 同时用云端 LLM 与嵌入，中文好、国内直连 |
+| 硅基流动 | `Qwen/Qwen3-Embedding-8B` | 2560 | 云端最高质量，2560 维截断 |
+| OpenAI | `text-embedding-3-large` | 2560（截断） | 全 OpenAI 技术栈；注意 `3-small` 上限 1536，不能用 |
 
 在 Web「模型」页的「嵌入模型」卡片里，**点对应推荐按钮即可一键填表**（只填不保存），
-确认无误再点「保存并立即生效」，最后用「测试嵌入」验证。换维度请先在「数据」页清库重灌。
+确认无误再点「保存并立即生效」，最后用「测试嵌入」验证返回维度。
 
+> 通义 `text-embedding-v3` / `bge-large` 系列原生 1024 维，无法到 2560，故不列入推荐。
 > 商汤日日新 Token Plan 的 OpenAI 兼容网关（`https://token.sensenova.cn/v1`）**不提供 embeddings 接口**；
 > 其「Piccolo Embedding」属于另一套大装置 API，需要单独的 Key 与端点。因此用商汤对话/抽取模型时，
 > 嵌入请继续用本地 Ollama，不要在同一个 base_url 上调 `/embeddings`。

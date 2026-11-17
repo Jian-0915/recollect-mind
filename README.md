@@ -45,16 +45,22 @@ Two kinds of models are needed; each can be local or cloud (recommended combos a
 
 ### Choosing an embedding model
 
+> Every recommended model below **outputs 2560 dimensions**, matching this project's default store.
+> The `dimensions` parameter is sent automatically; endpoints that don't support it fall back gracefully.
+> **Same dimension ≠ same vector space** — after switching models you should still rebuild vectors / clear
+> and re-ingest for reliable retrieval.
+
 | Option | Model | Dim | Best for |
 |---|---|---|---|
-| **Local Ollama (recommended)** | `qwen3-embedding:4b` | 2560 | best Chinese memory retrieval, free, data stays local; this project's default |
-| Local Ollama | `bge-large:latest` | 1024 | weaker machines, faster/cheaper |
-| DashScope / Qwen | `text-embedding-v3` | 1024 | already on Alibaba Cloud, good Chinese, CN-direct |
-| SiliconFlow | `BAAI/bge-large-zh-v1.5` | 1024 | one key for both cloud LLM and embeddings |
-| OpenAI | `text-embedding-3-small` | 1536 | all-OpenAI stack, English/multilingual |
+| **Local Ollama (recommended)** | `qwen3-embedding:4b` | 2560 (native) | best Chinese memory retrieval, free, data stays local; this project's default |
+| Local Ollama | `qwen3-embedding:8b` | 2560 (truncated) | #1 on MTEB, highest quality; pick when you have spare resources |
+| SiliconFlow | `Qwen/Qwen3-Embedding-4B` | 2560 | one key for cloud LLM + embeddings, good Chinese, CN-direct |
+| SiliconFlow | `Qwen/Qwen3-Embedding-8B` | 2560 | best hosted quality at 2560 |
+| OpenAI | `text-embedding-3-large` | 2560 (truncated) | all-OpenAI stack; note `3-small` caps at 1536 and can't reach 2560 |
 
-In the web "Models" page, under "Embedding model", **click a recommendation to fill the form** (fill only, no auto-save), confirm, then click "Save & apply" and verify with "Test embedding". Changing dimension requires clearing and re-ingesting the store first.
+In the web "Models" page, under "Embedding model", **click a recommendation to fill the form** (fill only, no auto-save), confirm, then click "Save & apply" and verify the returned dimension with "Test embedding".
 
+> DashScope `text-embedding-v3` and the `bge-large` family are natively 1024-dim and can't reach 2560, so they are excluded.
 > SenseNova's Token Plan OpenAI-compatible gateway (`https://token.sensenova.cn/v1`) has **no embeddings endpoint**; its "Piccolo Embedding" belongs to a separate SenseCore API needing its own key/base_url. So when using SenseNova chat/extract models, keep embeddings on local Ollama — do not call `/embeddings` on the same base_url.
 
 ### Option A: local Ollama (free, no key — recommended to start)

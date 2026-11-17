@@ -14,6 +14,16 @@ def _cfg():
     return settings.current()["embed"]
 
 
+def _dim_body(cfg, body):
+    """若配置了向量维度就随请求发送 dimensions（Matryoshka 模型可指定输出维度）。
+    不支持该参数的端点由调用方降级重试，避免老服务直接报错。"""
+    dim = cfg.get("dim")
+    if dim:
+        body = dict(body)
+        body["dimensions"] = int(dim)
+    return body
+
+
 def _ollama_embed(cfg, texts):
     base = settings.ollama_base(cfg.get("base_url"))
     model = cfg.get("model") or config.EMBED_MODEL
@@ -21,10 +31,14 @@ def _ollama_embed(cfg, texts):
     # keep_alive：默认策略下 ollama 冷启动要**重新加载 2.5GB 模型**，实测单次
     # 嵌入从 250ms 变成 50~70s（评测跑一轮 27 题被拖到半小时以上）。显式常驻
     # 一次都不再付这个代价；模型名或机器换掉时按配置覆盖即可。
-    body = {"model": model, "input": texts,
-            "keep_alive": getattr(config, "EMBED_KEEP_ALIVE", "30m")}
+    body = _dim_body(cfg, {"model": model, "input": texts,
+                           "keep_alive": getattr(config, "EMBED_KEEP_ALIVE", "30m")})
     try:
         r = requests.post(f"{base}/api/embed", json=body, timeout=timeout)
+        if not r.ok and r.status_code >= 400 and "dimensions" in body:
+            # 老版 Ollama 不认 dimensions：去掉后重试一次
+            body.pop("dimensions")
+            r = requests.post(f"{base}/api/embed", json=body, timeout=timeout)
         if r.ok:
             d = r.json()
             embs = d.get("embeddings")
@@ -44,9 +58,15 @@ def _ollama_embed(cfg, texts):
 
 def _openai_embed(cfg, texts):
     url = settings.openai_base(cfg.get("base_url")) + "/embeddings"
-    body = {"model": cfg.get("model"), "input": texts}
-    r = requests.post(url, json=body, headers=settings.openai_headers(cfg),
+    headers = settings.openai_headers(cfg)
+    body = _dim_body(cfg, {"model": cfg.get("model"), "input": texts})
+    r = requests.post(url, json=body, headers=headers,
                       timeout=cfg.get("timeout") or 30)
+    if r.status_code >= 400 and "dimensions" in body:
+        # 端点不支持 dimensions（多数老服务）：去掉后重试一次
+        body.pop("dimensions")
+        r = requests.post(url, json=body, headers=headers,
+                          timeout=cfg.get("timeout") or 30)
     if r.status_code >= 400:
         detail = ""
         try:
