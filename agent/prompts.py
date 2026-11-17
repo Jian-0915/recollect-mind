@@ -167,7 +167,7 @@ def _now_block(now=None):
         from datetime import datetime
         d = now or datetime.now().astimezone()
         wd = "星期" + "一二三四五六日"[d.weekday()]
-        h = d.hour
+        h, mi = d.hour, d.minute
         if 5 <= h < 11:
             period = "上午"
         elif 11 <= h < 13:
@@ -178,13 +178,18 @@ def _now_block(now=None):
             period = "晚上"
         else:
             period = "深夜"
+        clock = "%02d:%02d" % (h, mi)
         return (
-            "【现在的时间（判断「今天/昨天/上周/明天」一律以此为准）】\n"
-            "当前日期：%s（%s），%s。\n"
+            "【现在的时间（你确实知道，判断「今天/昨天/上周/明天」一律以此为准）】\n"
+            "当前日期：%s（%s），%s %s。\n"
             "记忆条目开头的 [日期] 是**事情发生的日期**（「记于」表示没有明确发生日期、按写入日计）。\n"
+            "对方直接问「现在几点 / 今天几号 / 星期几 / 现在什么时间」时，照上面这条直接回答"
+            "（如「现在%s，%s」「今天%s」）——这是你确实知道的信息，**不许说「看不见时间 /"
+            " 不知道现在几点 / 你告诉我几点」之类的话**。\n"
             "对方说「今天 / 昨晚 / 上周 / 这两天 / 明天」时，用这个当前日期换算成具体日期，"
             "再去对记忆里的 [日期]；不要因为措辞不同就说记不清，也不要把更早的事说成今天的。"
-            % (d.strftime("%Y-%m-%d"), wd, period))
+            % (d.strftime("%Y-%m-%d"), wd, period, clock,
+               period + clock, wd, d.strftime("%Y-%m-%d")))
     except Exception:
         return ""
 

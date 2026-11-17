@@ -14,8 +14,11 @@ def test_now_block_contains_date_weekday_period():
     assert "2026-11-17" in p
     assert "星期二" in p          # 2026-11-17 是周二
     assert "下午" in p            # 14:30
+    assert "14:30" in p           # 精确到时分，能回答"现在几点"
     assert "以此为准" in p
     assert "事情发生的日期" in p
+    assert "现在几点" in p         # 明确允许直接回答时间问题
+    assert "不许说" in p           # 禁止再说"看不见时间"
 
 
 def test_now_block_period_boundaries():
