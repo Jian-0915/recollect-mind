@@ -653,7 +653,7 @@ class CompanionAgent:
     def step(self, text):
         text = str(text or "").strip()
         t0 = time.time()
-        pack = self.brain.turn(text) if self.brain else None
+        pack = self.brain.turn(text, history=self.history) if self.brain else None
         # 留下本轮候选的完整快照：评测与排查都要回答「是没召回，还是召回了没用」。
         # 只留判分需要的字段，避免整包 embedding 驻留内存。
         self.last_pack = pack
@@ -773,6 +773,7 @@ class CompanionAgent:
         row = {
             "turn": len(self.trace) + 1, "session_id": self.session_id,
             "use_brain": self.use_brain, "user": text, "reply": reply,
+            "query_rewrite": (pack.get("query_rewrite") or "") if pack else "",
             "candidate_count": len(cand_ids),
             "candidates": [{"id": c.get("id"), "subject": c.get("subject"),
                             "score": round(float(c.get("score") or 0), 3)}

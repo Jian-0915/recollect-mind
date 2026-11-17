@@ -15,10 +15,15 @@
 
 MCP 仍是外部模型兼容通道；陪伴 agent 自己走这个 SDK。
 """
+import re
 from datetime import datetime, timezone
 
 from . import (adoption, affect, companion, config, db, goals, identity,
                persona_card, query, recall, store)
+
+# 共指改写时跳过的寒暄：这些拼进向量只会引入噪声，救不了任何共指
+_Q_GREET = {"你好", "您好", "hi", "hello", "在吗", "在么", "谢谢", "再见",
+            "早", "晚安", "嗯", "哦", "好的", "行"}
 
 _POLICY = (
     "【契约】候选只是候选，是否相关、是否说出口由你自己判断；"
@@ -123,15 +128,42 @@ class Brain:
         self.cortex = cortex.Cortex(self, modules=modules)
 
     # ---------- 一轮开始：只给上下文，不生成回答 ----------
-    def turn(self, text, *, top_k=None, tag=None, affect_now=None):
-        """返回 ContextPack。只读检索 + 状态投影；不写 events、不生成回答。"""
+    def turn(self, text, *, top_k=None, tag=None, affect_now=None, history=None):
+        """返回 ContextPack。只读检索 + 状态投影；不写 events、不生成回答。
+
+        ``history`` 是 agent 侧的最近对话（deque of {role,text,ts}）。给出时，
+        共指问句会用最近两轮对方原话**只改写向量 query**（见 recall 的
+        embed_query），关键词/时间/实体通道与 ``_last_query``、
+        ``ContextPack['query']``、commit 的 query_text 全部保持原始文本——
+        绝不让上下文污染再巩固用的「用户原话」。
+        """
         q = (text or "").strip()
         self._last_query = q
         st = companion.state(self.conn)
         snap = affect.snapshot(self.conn)
 
+        # 共指改写：只拼最近两轮「对方」原话，且避开寒暄/过长/已含足够实词的问句。
+        embed_q = None
+        rewrite_note = ""
+        if (history and getattr(config, "QUERY_REWRITE", True)
+                and re.search(r"[\u4e00-\u9fff]", q)):
+            recent = []
+            for h in reversed(list(history)):
+                if str(h.get("role")) != self.counterpart:
+                    continue
+                t = str(h.get("text") or "").strip()
+                if t and t.lower() not in _Q_GREET:
+                    recent.append(t[:60])
+                if len(recent) >= getattr(config, "QUERY_REWRITE_TURNS", 2):
+                    break
+            if recent:
+                ctx = "。".join(reversed(recent))
+                embed_q = ctx + "。" + q
+                rewrite_note = ctx
+
         items = recall.recall(self.conn, q,
-                              top_k=int(top_k or config.BRAIN_TOP_K), tag=tag)
+                              top_k=int(top_k or config.BRAIN_TOP_K), tag=tag,
+                              embed_query=embed_q)
         candidates = []
         for it in items:
             sub = it.get("subject") or config.DEFAULT_SUBJECT
@@ -177,6 +209,7 @@ class Brain:
 
         pack = ContextPack(
             query=q, session_id=self.session_id,
+            query_rewrite=rewrite_note,   # trace 可观测：本轮向量用了哪些上文
             identity=st.get("identity"), identity_block=st.get("identity_block") or "",
             persona=pcur, persona_block=pblock,
             state=st, mood=snap, candidates=candidates,

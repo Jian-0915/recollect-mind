@@ -99,6 +99,11 @@ EMBED_KEEP_ALIVE = _env("EMBED_KEEP_ALIVE", "30m")  # ollama 常驻时长：不�
 
 # --- 召回参数 ---
 RECALL_TOP_K = 20
+# 共指查询改写（2026-11-17）：把最近两轮对方原话拼进向量 query，救回
+# 「我为什么疼」这类与答案无共享实词的共指题。只作用于向量通道，关键词 /
+# 时间 / 实体通道仍用原始 query，避免上下文里的词污染。NEUROMEM_QUERY_REWRITE=0 可关。
+QUERY_REWRITE = _env("QUERY_REWRITE", "1") != "0"
+QUERY_REWRITE_TURNS = 2                 # 拼进向量的最近对方轮次数
 RECALL_SEED = 5
 RECALL_KEEP_MIN = 0.15        # 绝对保底分：低于它宁可返回空依据，也不拿弱相关记忆凑数
 # 相对阈值（top1×0.65）的上限。没有上限时，top1 一旦被词面巧合匹配到高分，

@@ -252,7 +252,16 @@ def _event_text(conn, eid):
     return " ".join(parts)
 
 
-def recall(conn, query, top_k=None, hops=None, info=None, tag=None):
+def recall(conn, query, top_k=None, hops=None, info=None, tag=None,
+           embed_query=None):
+    """检索候选。query 走关键词/时间/实体/图扩散；embed_query 只用于向量通道。
+
+    ``embed_query`` 是 2026-11-17 加的共指改写入口：把最近两轮对方原话
+    拼进向量 query，能救回「我为什么疼」这类问句与答案无共享实词的共指题
+    （实验 top1 第 7 → 第 1）。但关键词 / 时间 / 实体通道必须仍用**原始**
+    query——上下文里的时间词和人名会污染这些通道。所以拆成两个参数，
+    而不是把改写后的整句覆盖 query。默认 None 时完全维持旧行为。
+    """
     top_k = top_k or config.RECALL_TOP_K
     hops = config.SPREAD_HOPS if hops is None else hops
 
@@ -262,7 +271,7 @@ def recall(conn, query, top_k=None, hops=None, info=None, tag=None):
 
     # 嵌入服务不可用时降级：向量通道归零，关键词/实体/时间/图扩散仍可工作
     try:
-        qv = embed.embed(query)
+        qv = embed.embed(embed_query or query)
     except Exception as e:
         qv = None
         if info is not None:
