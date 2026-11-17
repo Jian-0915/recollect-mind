@@ -18,7 +18,7 @@ Recollect is a memory layer that treats these as first-class problems, on top of
 
 - **No keys in source.** There is no real `sk-` key anywhere in the code. Your own key lives only in local `data/*.db` (`settings` table, Windows DPAPI-encrypted with a `dpapi:` prefix), and both `data/` and `*.db` are gitignored — so clone/commit/push never carry it.
 - **No personal model params.** Model names and endpoints are all overridable via environment variables; see [`.env.example`](.env.example). With no overrides, a generic local-Ollama default applies (in `config.py`) that belongs to nobody.
-- **First-run guidance.** If you switch the provider to a cloud endpoint in the web UI without a key, the overview page shows a banner guiding you to enter **your own** key. Local-Ollama users are never nagged.
+- **First-run guidance.** On first open (while the memory store is empty), the overview page shows a banner with the next step for your mode: local-Ollama users see the model-pull commands, cloud users are prompted to enter **their own** key. It disappears once you have memories, and can be dismissed manually.
 
 Pick one of two setups:
 
@@ -26,6 +26,47 @@ Pick one of two setups:
 2. **Cloud OpenAI-compatible endpoint (DeepSeek / DashScope / Moonshot / OpenAI, etc.):** in the web "Models" page pick a preset or enter base_url + model names, then paste **your own API key**. The key stays on your machine only.
 
 > To preset model names via env (never the key): copy `.env.example` to `.env` and edit the `NEUROMEM_*` values. Real environment variables take precedence over `.env` (handy for CI/tests). `.env` itself is gitignored.
+
+---
+
+## Models & where to get them
+
+Two kinds of models are needed; each can be local or cloud (recommended combos at the end):
+
+| Role | Purpose | Default (local) | Requirement |
+|---|---|---|---|
+| LLM extract | turns dialogue into structured memories / affect / profiles | `qwen3.5:4b` | fast, cheap, emits JSON |
+| LLM answer | generates replies and personas | `qwen3:8b` | stronger than extract, steadier |
+| Embedding | vectorizes memories; decides retrieval quality | `qwen3-embedding:4b` | **dimension must match the store (2560)** |
+
+### Option A: local Ollama (free, no key — recommended to start)
+
+1. Install Ollama: https://ollama.com (Windows/macOS/Linux, next-next-finish).
+2. Pull the models (first run downloads them; the embed model is ~2 GB):
+   ```bash
+   ollama pull qwen3-embedding:4b    # embedding, 2560-dim
+   ollama pull qwen3.5:4b            # extraction
+   ollama pull qwen3:8b              # answers (optional; 4B is fine for speed)
+   ```
+3. No key needed — just `python -m neuromem serve 8000`.
+
+> Switching the embedding model requires a matching **dimension** or old memories become unretrievable. The default store is 2560-dim (4B).
+
+### Option B: cloud OpenAI-compatible endpoints (bring your own key)
+
+In the web "Models" page click a preset (it fills base_url + model names), then paste **your own API key**. All providers below speak the OpenAI protocol — only base_url + key + model name differ:
+
+| Provider | Get a key (console) | base_url | Recommended (extract / answer) | Notes |
+|---|---|---|---|---|
+| **DeepSeek** (recommended) | https://platform.deepseek.com | `https://api.deepseek.com` | `deepseek-chat` / `deepseek-chat` | fast, cheap, free credits on signup |
+| DashScope / Qwen | https://bailian.console.aliyun.com | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | stable, new-user credits |
+| Moonshot | https://platform.moonshot.cn | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | Kimi series |
+| SiliconFlow | https://cloud.siliconflow.cn | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` / `Qwen/Qwen2.5-72B-Instruct` | try many models with one key, free tier |
+| OpenAI | https://platform.openai.com/api-keys | `https://api.openai.com/v1` | `gpt-4o-mini` / `gpt-4o-mini` | needs overseas network + payment |
+
+> Getting a key, generally: sign up → open the console's "API Keys" page → create and copy it (usually shown once — save it immediately). Provider names and model IDs change over time; trust what the console shows. If you get `model not found`, copy the exact ID from the provider's model list.
+
+**Recommended combos**: start with the full local-Ollama stack (zero cost). For stronger generation, use DeepSeek for both extract + answer (one key, simplest). Keep the embedding model local 4B to avoid dimension mismatches and cloud embedding cost.
 
 ---
 

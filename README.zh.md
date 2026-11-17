@@ -18,8 +18,9 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
   已被 `.gitignore` 排除——所以克隆、提交、推送都不会带上它。
 - **没有专属模型参数**：模型名与端点全部可通过环境变量覆盖，模板见 [`.env.example`](.env.example)。
   不设置时用一组通用的「本地 Ollama」默认值（见 `config.py`），与任何人无关。
-- **首次引导**：若你在 Web「模型」页把 provider 切成云端却没填 Key，概览页顶部会出现提示，
-  引导你填入**自己的** Key；本地 Ollama 用户不会被打扰。
+- **首次引导**：首次打开（库里还没有任何记忆）时，概览页顶部会出现引导卡片，
+  按你当前的模式给出下一步——本地 Ollama 用户看到拉模型命令，云端模式则提示填自己的 Key。
+  一旦库里有记忆就自动消失；也可手动关掉。
 
 两种用法任选其一：
 
@@ -29,6 +30,49 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 
 > 想用环境变量预置模型名（不写 Key）：复制 `.env.example` 为 `.env`，改对应 `NEUROMEM_*` 值即可。
 > 系统环境里的同名变量优先于 `.env`，方便 CI / 测试注入。`.env` 本身被 gitignore。
+
+## 模型与获取
+
+系统需要两类模型，二者可分别选本地或云端（推荐组合见文末）：
+
+| 角色 | 作用 | 默认（本地） | 要求 |
+|---|---|---|---|
+| LLM 抽取模型 | 把对话提炼成结构化记忆、情感、画像 | `qwen3.5:4b` | 快、便宜、能出 JSON |
+| LLM 回答模型 | 生成回答、人物画像 | `qwen3:8b` | 比抽取模型强，生成更稳 |
+| 嵌入模型 | 把记忆变成向量，决定检索质量 | `qwen3-embedding:4b` | **维度必须和库一致（2560）** |
+
+### 方案 A：本地 Ollama（免费、无需 Key，推荐先用）
+
+1. 安装 Ollama：https://ollama.com （Windows/macOS/Linux，一路下一步）。
+2. 拉取模型（首次会下载，嵌入模型约 2GB）：
+   ```bash
+   ollama pull qwen3-embedding:4b    # 嵌入，2560 维
+   ollama pull qwen3.5:4b            # 抽取
+   ollama pull qwen3:8b              # 回答（可选，追求更快可只用 4B）
+   ```
+3. 不用填任何 Key，直接 `python -m neuromem serve 8000` 即可。
+
+> 注意：**换了嵌入模型必须维度一致**，否则旧记忆检索不到。默认库是 2560 维（4B）。
+> 想换嵌入模型，请在「模型」页同步修改维度，或清库重建。
+
+### 方案 B：云端 OpenAI 兼容端点（填你自己的 Key）
+
+在 Web「模型」页点对应预设（会自动填好 base_url 和模型名），再粘贴**你自己的 API Key** 即可。
+各平台均兼容 OpenAI 接口，只需 base_url + Key + 模型名三项：
+
+| 平台 | 申请 Key（控制台） | base_url | 推荐模型（抽取 / 回答） | 备注 |
+|---|---|---|---|---|
+| **DeepSeek**（推荐） | https://platform.deepseek.com | `https://api.deepseek.com` | `deepseek-chat` / `deepseek-chat` | 国内直连、便宜，注册有额度 |
+| 通义千问（阿里百炼） | https://bailian.console.aliyun.com | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` / `qwen-max` | 稳定，新用户有免费额度 |
+| 月之暗面 Moonshot | https://platform.moonshot.cn | `https://api.moonshot.cn/v1` | `moonshot-v1-8k` | Kimi 系列 |
+| 硅基流动 | https://cloud.siliconflow.cn | `https://api.siliconflow.cn/v1` | `Qwen/Qwen2.5-7B-Instruct` / `Qwen/Qwen2.5-72B-Instruct` | 一个 Key 试多种模型，有免费模型 |
+| OpenAI | https://platform.openai.com/api-keys | `https://api.openai.com/v1` | `gpt-4o-mini` / `gpt-4o-mini` | 需海外网络与支付方式 |
+
+> Key 获取通用步骤：注册账号 → 进控制台「API Keys / API 密钥」页 → 创建并复制（通常只显示一次，务必当场保存）。
+> 平台名 / 模型 ID 可能随时间调整，以各平台控制台当前显示为准；报错 `model not found` 时去模型列表页复制准确 ID。
+
+**推荐组合**：入门用「本地 Ollama 全家桶」零成本跑通；要更强生成质量用「DeepSeek 抽取 + 回答」
+（一个 Key 搞定，最省事）。嵌入模型建议始终用本地 4B，避免云端嵌入的维度与费用问题。
 
 ## 依赖
 

@@ -81,6 +81,8 @@
   .setup-banner .body b{display:block;font-size:13.5px;margin-bottom:3px}
   .setup-banner .body p{margin:0;color:var(--fg-2);font-size:12px;line-height:1.65}
   .setup-banner .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .setup-banner code,.donate-card code{font-family:var(--mono);font-size:11.5px;
+    background:var(--surface-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--fg)}
   /* 支持本项目：二维码占位卡 */
   .donate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
   .donate-card{text-align:center;padding:20px 16px}
@@ -770,29 +772,44 @@ function kpiCard(k, v, extra){
     ${extra ? `<div class="hint">${extra}</div>` : ''}</div>`;
 }
 
-// 首次配置引导：仅当「云端模式却没填 Key」时出现，本地 Ollama 用户不打扰。
-// 点「稍后」写入 localStorage，之后不再提示；点「去配置」跳模型页。
+// 首次配置引导：空库新实例就显示（不管本地还是云端），教用户把模型跑起来。
+// 本地 Ollama → 提示拉模型命令；云端没 Key → 提示填自己的 Key。
+// 库里已有记忆、或云端已配好 Key，视为「已在用」，不再打扰。
+// 点「稍后」写入 localStorage 不再提示；点「去配置」跳模型页。
 async function setupBannerHtml(){
   try{
-    let key = 'recollect_setup_dismissed';
     let dismissed = false;
-    try{ dismissed = localStorage.getItem(key) === '1'; }catch(e){}
+    try{ dismissed = localStorage.getItem('recollect_setup_dismissed') === '1'; }catch(e){}
     if(dismissed) return '';
-    const d = await api('/api/settings');
+    const [d, ov] = await Promise.all([api('/api/settings'), api('/api/overview')]);
     const L = (d.settings || {}).llm || {};
     const cloud = L.provider === 'openai_compat';
     const hasKey = !!(L.api_key_info && L.api_key_info.set);
-    if(!cloud || hasKey) return '';
+    const empty = !ov || (ov.active_events || 0) === 0;
+    if(!empty) return '';              // 已有记忆：在使用过程中，不打扰
+    if(cloud && hasKey) return '';     // 云端已配 Key：不打扰
+
+    let title, desc;
+    if(cloud && !hasKey){
+      title = '云端模式还没配置 API Key';
+      desc = `当前指向 <code>${esc(L.base_url || '')}</code>，但没有 Key，模型调用会失败。
+        在「模型」页点一个预设（推荐 <b>deepseek</b>）并填入<strong>你自己的 API Key</strong>；
+        或切回本地 Ollama（无需 Key）。`;
+    }else{
+      title = '欢迎 —— 这是一个干净的空白实例';
+      desc = `本项目不内置任何模型或密钥。默认用本地 Ollama（无需 Key）：先安装 Ollama，
+        再拉取两个模型 <code>ollama pull qwen3-embedding:4b</code> 与
+        <code>ollama pull qwen3.5:4b</code>。没有本地环境也可在「模型」页切云端并填自己的 Key
+        （推荐 DeepSeek，注册即有额度）。模型推荐与申请地址见仓库 README 的「模型与获取」一节。`;
+    }
     return `<div class="setup-banner" id="setupBanner">
       <div class="ico">&#9881;</div>
       <div class="body">
-        <b>这是个干净实例 —— 还没有任何 API Key</b>
-        <p>本项目不内置任何模型密钥。当前是云端模式（${esc(L.base_url || '')}）但未配置 Key，
-        模型调用会失败。你可以在「模型」页填入<strong>自己的 API Key</strong>与模型名；
-        或改用本地 Ollama（无需 Key，安装后开箱即用）。</p>
+        <b>${title}</b>
+        <p>${desc}</p>
         <div class="acts">
-          <button class="act primary" onclick="dismissSetup('go')">去「模型」页配置自己的 Key</button>
-          <button class="act" onclick="dismissSetup('later')">我用本地 Ollama / 稍后再说</button>
+          <button class="act primary" onclick="dismissSetup('go')">去「模型」页配置</button>
+          <button class="act" onclick="dismissSetup('later')">知道了 / 稍后再说</button>
         </div>
       </div>
     </div>`;
