@@ -9,8 +9,26 @@ SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管�
 
 ---
 
+## 关于「干净版」与 API Key
 
-一个从空白出发、会记、会联想、会召回的**成长型记忆系统**（MVP-1 原型）。
+**本项目不内置任何账号、API Key 或私有模型端点。** 这是一家可以直接公开克隆的干净版本：
+
+- **没有密钥**：源码里搜不到任何 `sk-` 开头的真实 Key。你自己的 Key 只保存在本机
+  `data/*.db` 的 settings 表（Windows DPAPI 加密，`dpapi:` 前缀），而 `data/`、`*.db`
+  已被 `.gitignore` 排除——所以克隆、提交、推送都不会带上它。
+- **没有专属模型参数**：模型名与端点全部可通过环境变量覆盖，模板见 [`.env.example`](.env.example)。
+  不设置时用一组通用的「本地 Ollama」默认值（见 `config.py`），与任何人无关。
+- **首次引导**：若你在 Web「模型」页把 provider 切成云端却没填 Key，概览页顶部会出现提示，
+  引导你填入**自己的** Key；本地 Ollama 用户不会被打扰。
+
+两种用法任选其一：
+
+1. **本地 Ollama（无需 Key，推荐先用）**：安装 Ollama 并 pull 下列模型，开箱即用。
+2. **云端 OpenAI 兼容端点（DeepSeek / 通义 / Moonshot / OpenAI 等）**：在 Web「模型」页选预设或手填
+   base_url、模型名，并填入**你自己的 API Key**。Key 只留在你本机。
+
+> 想用环境变量预置模型名（不写 Key）：复制 `.env.example` 为 `.env`，改对应 `NEUROMEM_*` 值即可。
+> 系统环境里的同名变量优先于 `.env`，方便 CI / 测试注入。`.env` 本身被 gitignore。
 
 ## 依赖
 
@@ -96,8 +114,9 @@ python tools/check_v12.py --full  # 额外跑 MCP 写入与 L2 回传（需 Olla
 python tools/check_v13.py         # v13 主体翻转 / 情感 / Brain / Cortex / 清库 / MCP（只读主库，跑副本）
 ```
 
-> 注：写入会调用云端 `deepseek-flash` 抽取；本地模型可用时也可切回 `qwen3.5:4b`。
-> 该模型开 think 遇悖论会卡死，因此 **默认 `think=False` + `num_predict` 限制 + 超时**。
+> 注：默认用本地 `qwen3.5:4b` 抽取（开箱即用，无需 Key）。若你在「模型」页切到云端端点，
+> 抽取/回答模型以你填的为准，Key 也用你自己的。部分模型开 think 遇悖论会卡死或跑偏，
+> 因此**云端思考默认关**（`think=False`，可在设置页单独打开），并对输出长度与超时做了限制。
 
 ## 账号与备份
 
@@ -261,3 +280,14 @@ python -c "from neuromem import Memory; m=Memory(); print(m.identity_block())"
 
 v12 的边界是「只立结构」：`"用户"` 常量仍在，`answer.py` 仍是旧档案库视角。这些在 v13 已经翻完，见下一节。固定身份目前是「待人工设定」的中性模板，请按你的 agent 人设填写。
 
+
+---
+
+## 支持本项目
+
+如果 Recollect 帮到了你，Web 界面侧栏的「支持」页有收款二维码（作者自愿维护，功能完全免费）。
+二维码图片放在 `web/donate/`（文件名 `wechat.png` / `alipay.png` / `coffee.png`），且被 `.gitignore`
+排除，不会进公开仓库。
+
+想贡献而不是打赏？提交 Issue、补充中文长对话测试用例、或写 benchmark 适配，
+对项目的价值更大 —— 详见下方 Contributing。

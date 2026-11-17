@@ -16,8 +16,8 @@ from . import (account, alias, auth, autoevolve, config, db, embed, evaluation,
                settings, store, tagging, usage, working_memory)
 from . import query as querymod
 from . import recall as recallmod
-from .persona import (build_profile, list_personas, list_relations,
-                      merge as merge_personas, normalize_type)
+from .persona import (build_profile, heal_relations, list_personas,
+                      list_relations, merge as merge_personas, normalize_type)
 from . import persona
 
 app = FastAPI(title="NeuroMem Viewer")
@@ -376,8 +376,10 @@ def persona_detail(pid: str):
                 "SELECT rel_type,strength,"
                 "CASE WHEN a=? THEN b ELSE a END other_id FROM relations WHERE a=? OR b=?",
                 (pid, pid, pid)):
+            other = names.get(r["other_id"])
             rels.append({"type": r["rel_type"], "strength": r["strength"],
-                         "other": names.get(r["other_id"], r["other_id"])})
+                         "other": other or "", "other_id": r["other_id"],
+                         "other_missing": other is None})
         d["relations"] = rels
         d["ok"] = True
         return d
@@ -512,6 +514,27 @@ def delete_relation(rid: str):
         cur = c.execute("DELETE FROM relations WHERE id=?", (rid,))
         c.commit()
         return {"ok": cur.rowcount > 0}
+    finally:
+        c.close()
+
+
+@app.post("/api/relations/heal")
+def heal_relations_ep():
+    """修复一端指向已删除人物的关系（按关系词找回同名人物卡）。
+
+    关系页上那些显示成 p_xxxx 的行就来自这类悬空数据；能修的按证据修，
+    修不了的返回 remaining 让前端继续标「人物已删除」，不猜、不删。
+    """
+    c = conn()
+    try:
+        actions = heal_relations(c, dry_run=False)
+        remaining = [r for r in list_relations(c) if r["broken"]]
+        return {"ok": True, "healed": [
+            {"id": rid, "rel_type": t, "from": old, "to": new, "to_name": name}
+            for (rid, t, old, new, name) in actions],
+            "remaining": [{"id": r["id"], "type": r["type"],
+                          "a": r["a"] or r["a_id"], "b": r["b"] or r["b_id"]}
+                         for r in remaining]}
     finally:
         c.close()
 
@@ -692,7 +715,7 @@ def put_settings(cfg: Dict[str, Any]):
 
     fields = {
         "llm": {"provider", "base_url", "api_key", "extract_model", "answer_model",
-                "timeout", "temperature"},
+                "timeout", "temperature", "think"},
         "embed": {"provider", "base_url", "api_key", "model", "dim", "timeout"},
     }
     cur = settings.current()

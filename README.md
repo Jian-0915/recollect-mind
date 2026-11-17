@@ -12,6 +12,21 @@ Recollect is a memory layer that treats these as first-class problems, on top of
 
 > Status: a working prototype (schema v21), not a hosted service. The Python package is still named `neuromem` internally — the repo rename is in progress. See [Roadmap](#roadmap).
 
+## Clean public build & API keys
+
+**This repository ships with no account, no API key, and no private endpoints.** It is a clean build you can clone and publish safely:
+
+- **No keys in source.** There is no real `sk-` key anywhere in the code. Your own key lives only in local `data/*.db` (`settings` table, Windows DPAPI-encrypted with a `dpapi:` prefix), and both `data/` and `*.db` are gitignored — so clone/commit/push never carry it.
+- **No personal model params.** Model names and endpoints are all overridable via environment variables; see [`.env.example`](.env.example). With no overrides, a generic local-Ollama default applies (in `config.py`) that belongs to nobody.
+- **First-run guidance.** If you switch the provider to a cloud endpoint in the web UI without a key, the overview page shows a banner guiding you to enter **your own** key. Local-Ollama users are never nagged.
+
+Pick one of two setups:
+
+1. **Local Ollama (no key, recommended to start):** install Ollama, pull the models below, and it just works.
+2. **Cloud OpenAI-compatible endpoint (DeepSeek / DashScope / Moonshot / OpenAI, etc.):** in the web "Models" page pick a preset or enter base_url + model names, then paste **your own API key**. The key stays on your machine only.
+
+> To preset model names via env (never the key): copy `.env.example` to `.env` and edit the `NEUROMEM_*` values. Real environment variables take precedence over `.env` (handy for CI/tests). `.env` itself is gitignored.
+
 ---
 
 ## How it differs
@@ -58,16 +73,18 @@ conversation turn
 
 ## Quick start
 
-Requires Python 3.11+ and [Ollama](https://ollama.com) for local embeddings (an OpenAI-compatible endpoint can be configured in the UI for the chat model).
+Requires Python 3.11+. The default setup uses [Ollama](https://ollama.com) locally (no API key needed); you can point the chat/embedding models at any OpenAI-compatible endpoint in the web UI using your own key. Model names are configurable via `.env` — see [Clean public build](#clean-public-build--api-keys).
 
 ```bash
 pip install -r requirements.txt
-ollama pull qwen3-embedding:4b        # 2560-dim, strong on Chinese retrieval
+ollama pull qwen3-embedding:4b        # default local embed model (2560-dim, strong on Chinese); configurable
 
 python -m neuromem init               # idempotent: tables + defaults
 python tools/seed_demo.py             # optional: 12 fictional memories to look at
 python -m neuromem serve 8000         # http://127.0.0.1:8000
 ```
+
+On first login, create an admin account in the browser. If you later switch to a cloud model without a key, the overview page will guide you to add your own.
 
 Chat with memory in the web UI, or call the API:
 
@@ -139,6 +156,10 @@ docs/         architecture notes and the development log
 ## Contributing
 
 Issues and PRs are welcome, especially: Chinese long-conversation test cases, attribution edge cases (kinship, pets, groups), and benchmark adapters. Please run `pytest tests/unit` before sending a PR — the suite is the contract.
+
+## Support
+
+If Recollect has been useful, the web UI has a "Support" page with QR codes (entirely optional — all features are free). Drop your images into `web/donate/` (`wechat.png` / `alipay.png` / `coffee.png`); they are gitignored and won't enter the public repo. Prefer to contribute instead? Issues, Chinese long-conversation test cases, and benchmark adapters are worth far more — see Contributing above.
 
 ## License
 

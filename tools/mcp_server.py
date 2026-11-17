@@ -202,8 +202,10 @@ def tool_person(args):
             return "没有找到人物「%s」" % name
         p = dict(found)
         gists = persona.event_gists(c, p["id"], limit=8)
+        # 按 id 匹配而不是名字：人物改名/合并后名字会变，id 不会；
+        # 悬空端的名字是空串，也别拼进输出
         rels = [r for r in persona.list_relations(c)
-                if r["a"] == p["canonical_name"] or r["b"] == p["canonical_name"]]
+                if p["id"] in (r["a_id"], r["b_id"]) and not r["broken"]]
     finally:
         c.close()
     out = ["人物：%s" % p["canonical_name"]]

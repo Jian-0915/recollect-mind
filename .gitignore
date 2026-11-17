@@ -35,6 +35,12 @@ Thumbs.db
 .idea/
 .vscode/
 
+# 收款二维码（个人收款码不进公开仓库）
+web/donate/*.png
+web/donate/*.jpg
+web/donate/*.jpeg
+web/donate/*.webp
+
 # 测试临时目录
 .pytest_tmp*/
 .pytest_cache/

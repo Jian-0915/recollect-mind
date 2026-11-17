@@ -690,6 +690,64 @@ web 陪伴对话的回答经常「跟问题没关系」，而且慢：`data/live
 - 端点仍会偶发不按 JSON 输出（冒烟里出现过一次整轮 `parse_ok=False` → 「我这边没组织好」）。
   这是端点稳定性问题，代码侧已有解析重试；换更稳的端点比继续加护栏划算。
 
+## v21.1：深度思考做成开关 + 用量页不再被顶下去（2026-11-16，无 schema 变更）
+
+用户提了两件事：管理页「最近调用」越长越高、把下面的模型配置顶出屏幕；
+以及想有个按钮控制深度思考——"用深度思考生成画像的时候生成了一堆英文，
+我怀疑是思考占用了长度"。
+
+### 第一件：定高内滚
+
+`usage.summary` 本来就只返回最近 20 条，问题在渲染：20 行 × 33px ≈ 660px，
+直接撑满 `ov-grid`。给表格套 `.scroll-box`（`max-height:332px; overflow-y:auto`），
+`thead th` 用 `position:sticky` 钉住表头，行高从 11px 收到 8px。
+
+### 第二件：思考确实在吃预算，但不一定是英文的成因
+
+先把「思考吃掉长度」量化了（主库副本，`deepseek-v4-flash`，同一条画像提示词）：
+
+| 开关 | 思考 token | 正文 | 汉字 / 字母 |
+|---|---|---|---|
+| 关 | 0 | 102 字 | 92 / 0 |
+| 开 | 96 | 82 字 | 68 / 0 |
+
+思考确实占了 96 token，正文从 102 字掉到 82 字（−20%），**但两条都是纯中文**，
+英文没有复现。所以修法按"机制"而不是按这一次的样本：
+
+1. **开思考时抬预算**（`config.LLM_THINK_RESERVE = 1024`）。`max_tokens` 是思考与
+   正文共用的池子，画像生成一直传 400 并要求 100 字中文——思考吃掉两三百后正文
+   只剩几十 token，被截断成半句、语言跟着漂。现在 `_call_openai` 在
+   `want_think` 时自动 `+1024`，**关思考时预算不动**（不白花配额）。
+2. **开思考时抬超时下限**（`LLM_THINK_TIMEOUT_MIN = 150`）。首字延迟翻倍，
+   调用方传的 90s 常常正好卡在思考结束前，超时一次画像就空白。
+3. **剥掉混进正文的思考**（`llm.strip_think_wrapper`）。少数端点不把 CoT 放
+   `reasoning_content`，而是直接拼在 `content` 开头（`<thinking>…</thinking>` 或
+   `Thinking process: …`）。这段通常是英文——用户看到的"一堆英文"最可能是它。
+   剥完为空则走既有降级重试，不会把半截英文当答案。
+4. **画像提示词显式要求简体中文**：即使思考用英文，正文也只能是中文。
+5. **开关本身**：`settings.llm.think`（默认 `False`），优先级
+   **显式参数 > 设置页开关 > `config.LLM_THINK_OFF`**。设置页是一个 switch，
+   拨动即 PUT 单字段生效，不影响表单里其他未保存的输入。
+
+### 可见性：把"思考吃了多少"变成一列
+
+`usage_log` 加 `think_tokens`（`_migrate` 里 ALTER 补列，老库直接可用），
+`llm.generate` 把本轮的 `reasoning_tokens` 记进去，「最近调用」多一列「思考」，
+非零标黄。这样"是不是思考挤掉了输出"不用猜，看这一列即可。
+
+### 踩坑：跑单测把假调用写进了主库
+
+同一天第二次犯同类错误。`conftest` 的 `memdb` 只是**opt-in**，而 `usage` 模块
+自己维护一条 `sqlite3.connect(config.DB_PATH)` 长连接，**根本不走 `db.connect`**。
+于是 `test_think_on_relaxes_timeout` 里 `llm.generate` 的假响应（`model='m'`、
+`latency_ms=0`、`tokens=10+8`）被写进了 `data/neuromem.db` 的 `usage_log`，
+管理页会凭空多出几行根本不存在的调用。
+
+- 数据：按 id 精确删除 6 条，备份在 `data/_experiments/usage_polluted_backup.json`
+- 代码：`conftest` 加 **autouse** 的 `_isolate_db`——每个用例都把 `config.DB_PATH`
+  指向 `tmp_path`，并丢掉 `usage` 的模块级长连接（前后各一次）
+- 验证：跑完整套单测前后对比 `max(id)`，新增记录全部是真实调用（latency > 1s）
+
 ## 陪伴 Agent 实验台（`agent/`，真实使用数据）
 
 **为什么要有它**：v13 之前的「真实数据」要么是脚本按规则填 `used_ids`，要么是别的模型经 MCP 跑的十几条记忆——能证明链路通，不能证明机制有用，更不可复现、没有对照。v13 新增的主体翻转 / 多维情感 / Brain / Cortex 从没在一段真实多轮对话里跑过。这一层就是**第一个真正使用记忆模块的 agent**，用可重复的剧本产生真实 L2 采纳、再巩固、情感与会话数据，把「机制跑起来是什么效果」变成可测量的数字。

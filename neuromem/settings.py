@@ -39,6 +39,9 @@ DEFAULTS = {
         "answer_model": config.ANSWER_MODEL,
         "timeout": config.LLM_TIMEOUT,
         "temperature": config.LLM_TEMPERATURE,
+        # 深度思考开关（设置页可见）。默认关：陪伴对话要快、要贴题，
+        # 开思考反而把预算烧在推理上、正文被截断（见 config.LLM_THINK_RESERVE）。
+        "think": not config.LLM_THINK_OFF,
     },
     "embed": {
         "provider": "ollama",

@@ -23,10 +23,22 @@ CREATE TABLE IF NOT EXISTS usage_log(
   latency_ms INTEGER,
   prompt_tokens INTEGER DEFAULT 0,
   completion_tokens INTEGER DEFAULT 0,
+  think_tokens INTEGER DEFAULT 0,
   error TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_usage_ts ON usage_log(ts);
 """
+
+
+def _migrate(c):
+    """老库补列：CREATE TABLE IF NOT EXISTS 不会给已存在的表加字段。"""
+    try:
+        cols = {r[1] for r in c.execute("PRAGMA table_info(usage_log)")}
+        if "think_tokens" not in cols:
+            c.execute("ALTER TABLE usage_log ADD COLUMN think_tokens INTEGER DEFAULT 0")
+            c.commit()
+    except Exception:
+        pass
 
 
 def _db():
@@ -40,6 +52,7 @@ def _db():
             c.execute("PRAGMA busy_timeout=5000")
             c.executescript(_SCHEMA)
             c.commit()
+            _migrate(c)
             _conn = c
     return _conn
 
@@ -49,17 +62,23 @@ def _now():
 
 
 def record(kind, role, provider, model, ok, latency_ms,
-           prompt_tokens=0, completion_tokens=0, error=""):
-    """记录一次模型调用。失败静默，不影响业务。"""
+           prompt_tokens=0, completion_tokens=0, error="", think_tokens=0):
+    """记录一次模型调用。失败静默，不影响业务。
+
+    ``think_tokens`` 是这次真实消耗的思考 token：与正文共用 max_tokens 池子，
+    单独记下来才能回答「是不是思考把输出挤掉了」。
+    """
     try:
         with _lock:
             c = _db()
             c.execute(
                 "INSERT INTO usage_log(ts,kind,role,provider,model,ok,latency_ms,"
-                "prompt_tokens,completion_tokens,error) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                "prompt_tokens,completion_tokens,think_tokens,error) "
+                "VALUES(?,?,?,?,?,?,?,?,?,?,?)",
                 (_now(), kind, role or "", provider or "", model or "",
                  1 if ok else 0, int(latency_ms or 0),
-                 int(prompt_tokens or 0), int(completion_tokens or 0), (error or "")[:300]),
+                 int(prompt_tokens or 0), int(completion_tokens or 0),
+                 int(think_tokens or 0), (error or "")[:300]),
             )
             c.commit()
     except Exception:
@@ -120,6 +139,7 @@ def summary(days=7):
     recent = [{"ts": r["ts"], "kind": r["kind"], "role": r["role"], "model": r["model"],
                "ok": bool(r["ok"]), "ms": r["latency_ms"],
                "tokens": (r["prompt_tokens"] or 0) + (r["completion_tokens"] or 0),
+               "think": (r["think_tokens"] or 0),
                "error": r["error"]} for r in rows[:20]]
 
     calls = totals["calls"] or 1

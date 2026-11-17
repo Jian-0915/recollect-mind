@@ -8,6 +8,7 @@ from . import config, db, entity, llm
 
 _PROFILE_PROMPT = """根据下面关于"{name}"的经历，写一段简明的人物画像（100字内）。
 包含：性格 / 喜好 / 重要关系 / 近况。用第三人称，不要编造经历里没有的内容。
+**必须用简体中文输出**：即使思考过程用了英文，最终这段画像也只能是中文。
 经历：
 {events}
 只输出画像文字，不要解释。"""
@@ -466,16 +467,70 @@ def extract_relations(conn, text, speaker=None):
     return out
 
 
+def _name_map(conn):
+    return {r["id"]: r["canonical_name"]
+            for r in conn.execute("SELECT id,canonical_name FROM personas")}
+
+
 def list_relations(conn):
-    name_map = {r["id"]: r["canonical_name"] for r in conn.execute("SELECT id,canonical_name FROM personas")}
-    return [
-        {"id": r["id"],
-         "a": name_map.get(r["a"], r["a"]), "b": name_map.get(r["b"], r["b"]),
-         "type": r["rel_type"], "strength": r["strength"],
-         "since": r["since"] or "", "until": r["until"] or "",
-         "evidence": r["evidence"] or ""}
-        for r in conn.execute("SELECT * FROM relations ORDER BY rowid DESC")
-    ]
+    """关系列表；人物已被删除/合并时**不许把内部 id 当名字下发**。
+
+    v22 之前这里是 ``name_map.get(r["a"], r["a"])``：人物行一旦没了（历史合并、
+    手工删库、旧版 merge 不迁 relations），接口就直接把 ``p_8922ac406acb``
+    这种内部主键渲染到「关系」页上。现在名字缺失时返回空串并带 ``broken``
+    标记，前端显示「人物已删除」，id 只在 ``*_id`` 里留给排障和修复用。
+    """
+    names = _name_map(conn)
+    out = []
+    for r in conn.execute("SELECT * FROM relations ORDER BY rowid DESC"):
+        an, bn = names.get(r["a"]), names.get(r["b"])
+        out.append({
+            "id": r["id"],
+            "a_id": r["a"], "b_id": r["b"],
+            "a": an or "", "b": bn or "",
+            "a_missing": an is None, "b_missing": bn is None,
+            "broken": an is None or bn is None,
+            "type": r["rel_type"], "strength": r["strength"],
+            "since": r["since"] or "", "until": r["until"] or "",
+            "evidence": r["evidence"] or "",
+        })
+    return out
+
+
+def heal_relations(conn, dry_run=True):
+    """修复一端已被删除的关系。
+
+    历史数据里存在「关系指向已不存在的人物」——旧版合并只搬了 edges，没搬
+    relations。这些行在界面上表现为一串 id（见 ``list_relations`` 注释）。
+    大部分能按关系词复原：``A —表哥→ p_6a32…`` 里的 ``表哥`` 就是被删掉的
+    那个人物名，库里通常还留着一张同名人物卡。
+
+    只做**可证明**的修复：候选名 = 关系词，且库里确有同名人物、且修完不会
+    变成自环。修不了的原样保留（交给人工判断，不猜、不删）。
+    返回 ``[(rid, rel_type, from_id, to_id, to_name), …]``。
+    """
+    names = _name_map(conn)
+    actions = []
+    for r in conn.execute("SELECT * FROM relations ORDER BY rowid DESC"):
+        a, b, t = r["a"], r["b"], (r["rel_type"] or "").strip()
+        target = None
+        if a not in names and b in names:
+            target = (a, "a", b)
+        elif b not in names and a in names:
+            target = (b, "b", a)
+        if not target or not t:
+            continue
+        old_id, col, other_id = target
+        cand = find(conn, t)
+        if not cand or cand["id"] == other_id:
+            continue          # 修不了，或会变成「自己和自己」的关系
+        actions.append((r["id"], t, old_id, cand["id"], cand["canonical_name"]))
+        if not dry_run:
+            conn.execute("UPDATE relations SET %s=? WHERE id=?" % col,
+                         (cand["id"], r["id"]))
+    if not dry_run and actions:
+        conn.commit()
+    return actions
 
 
 def active_relations(conn, min_strength=0.3, on_date=None):
@@ -484,8 +539,7 @@ def active_relations(conn, min_strength=0.3, on_date=None):
     P0-7：强度与时间边界不再只是展示字段——召回与回答都会用。
     """
     day = (on_date or datetime.now().date().isoformat())[:10]
-    name_map = {r["id"]: r["canonical_name"]
-                for r in conn.execute("SELECT id,canonical_name FROM personas")}
+    names = _name_map(conn)
     out = []
     for r in conn.execute("SELECT * FROM relations ORDER BY strength DESC"):
         until = (r["until"] or "")[:10]
@@ -494,9 +548,14 @@ def active_relations(conn, min_strength=0.3, on_date=None):
         st = float(r["strength"] or 0.0)
         if st < min_strength:
             continue
+        a, b = names.get(r["a"]), names.get(r["b"])
+        if not a or not b:
+            # 一端已被删除：这条关系既没法描述、也没法判断指向谁。
+            # 以前会退回显示原 id，结果把 p_xxxx 拼进召回上下文/回答里。
+            continue
         out.append({
             "id": r["id"], "a_id": r["a"], "b_id": r["b"],
-            "a": name_map.get(r["a"], r["a"]), "b": name_map.get(r["b"], r["b"]),
+            "a": a, "b": b,
             "type": r["rel_type"], "strength": round(st, 3),
             "since": (r["since"] or "")[:10], "until": until,
             "evidence": r["evidence"] or "",

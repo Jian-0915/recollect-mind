@@ -64,6 +64,47 @@
     font-variant-numeric:tabular-nums}
   .kpi{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px}
   .ov-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+  /* 调用记录只增不减：定高内滚，别把下面的模型配置顶出屏幕 */
+  .scroll-box{max-height:332px;overflow-y:auto;margin-top:8px;
+    border:1px solid var(--line-soft);border-radius:10px}
+  .scroll-box table{margin:0}
+  .scroll-box thead th{position:sticky;top:0;z-index:1;background:var(--surface);
+    padding:9px 10px 7px;box-shadow:inset 0 -1px 0 var(--line-soft)}
+  .scroll-box tbody td{padding:8px 10px}
+  /* 首次配置引导横幅 */
+  .setup-banner{display:flex;align-items:flex-start;gap:13px;padding:14px 16px;margin-bottom:16px;
+    border:1px solid rgba(242,197,107,.32);border-radius:var(--r);
+    background:linear-gradient(135deg,rgba(242,197,107,.10),rgba(108,140,255,.06))}
+  .setup-banner .ico{width:30px;height:30px;border-radius:9px;flex:none;display:grid;place-items:center;
+    background:rgba(242,197,107,.16);color:var(--warn);font-size:16px}
+  .setup-banner .body{flex:1;min-width:0}
+  .setup-banner .body b{display:block;font-size:13.5px;margin-bottom:3px}
+  .setup-banner .body p{margin:0;color:var(--fg-2);font-size:12px;line-height:1.65}
+  .setup-banner .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  /* 支持本项目：二维码占位卡 */
+  .donate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px}
+  .donate-card{text-align:center;padding:20px 16px}
+  .donate-card .qr{width:160px;height:160px;margin:6px auto 12px;border-radius:12px;
+    border:1px dashed var(--line);background:
+      repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(255,255,255,.02) 8px,rgba(255,255,255,.02) 16px);
+    display:grid;place-items:center;color:var(--fg-3);position:relative;overflow:hidden}
+  .donate-card .qr img{width:100%;height:100%;object-fit:contain;position:absolute;inset:0}
+  .donate-card .qr .ph{font-size:11px;line-height:1.6;padding:0 12px}
+  .donate-card .qr .ph b{display:block;font-size:12.5px;color:var(--fg-2);margin-bottom:4px}
+  .donate-card .t{font-size:13.5px;font-weight:600}
+  .donate-card .s{font-size:11.5px;color:var(--fg-3);margin-top:3px}
+  /* 开关 */
+  .sw{display:inline-flex;align-items:center;gap:10px;cursor:pointer;
+    user-select:none;position:relative}
+  .sw input{position:absolute;opacity:0;width:0;height:0}
+  .sw .track{width:38px;height:21px;border-radius:999px;background:var(--bg-2);
+    border:1px solid var(--line);position:relative;flex:none;transition:all .16s}
+  .sw .track::after{content:'';position:absolute;left:2px;top:2px;width:15px;height:15px;
+    border-radius:50%;background:var(--fg-3);transition:all .16s}
+  .sw input:checked + .track{background:var(--acc-soft);border-color:rgba(108,140,255,.55)}
+  .sw input:checked + .track::after{transform:translateX(17px);background:var(--acc)}
+  .sw .lbl{font-size:13px;color:var(--fg)}
+  .sw .sub{font-size:11.5px;color:var(--fg-3);display:block;margin-top:1px}
   /* ==== 表格 ==== */
   table{width:100%;border-collapse:collapse;font-size:13px}
   th{color:var(--fg-3);font-size:10.5px;letter-spacing:.07em;text-transform:uppercase;
@@ -71,6 +112,7 @@
   td{padding:11px 10px;border-top:1px solid var(--line-soft);vertical-align:top}
   tbody tr{transition:background .12s}
   tbody tr:hover{background:rgba(255,255,255,.018)}
+  .num{font-variant-numeric:tabular-nums;font-family:var(--mono);font-size:12px;color:var(--fg-2)}
   /* ==== 控件 ==== */
   input,textarea,select{background:var(--bg-2);color:var(--fg);border:1px solid var(--line);
     border-radius:9px;padding:8px 11px;font-family:inherit;font-size:13px;outline:none;
@@ -276,6 +318,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><ellipse cx="12" cy="6" rx="7.5" ry="2.8"/><path d="M4.5 6v12c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8V6"/><path d="M4.5 12c0 1.6 3.4 2.8 7.5 2.8s7.5-1.2 7.5-2.8"/></svg>
       数据
     </button>
+    <button class="nav-item" data-tab="support">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8l1.1 1.1L12 21l7.7-7.5 1.1-1.1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+      支持
+    </button>
   </div>
 
   <div class="side-foot">
@@ -480,6 +526,7 @@ const PAGE_META = {
   models: ['模型', '配置与调用用量'],
   persona: ['人设', '陪伴 agent 的人格与说话方式（L0，人工设定）'],
   data: ['数据', '备份、导出与危险操作'],
+  support: ['支持', '如果 Recollect 帮到了你'],
 };
 
 async function loadOverview(){
@@ -723,13 +770,48 @@ function kpiCard(k, v, extra){
     ${extra ? `<div class="hint">${extra}</div>` : ''}</div>`;
 }
 
+// 首次配置引导：仅当「云端模式却没填 Key」时出现，本地 Ollama 用户不打扰。
+// 点「稍后」写入 localStorage，之后不再提示；点「去配置」跳模型页。
+async function setupBannerHtml(){
+  try{
+    let key = 'recollect_setup_dismissed';
+    let dismissed = false;
+    try{ dismissed = localStorage.getItem(key) === '1'; }catch(e){}
+    if(dismissed) return '';
+    const d = await api('/api/settings');
+    const L = (d.settings || {}).llm || {};
+    const cloud = L.provider === 'openai_compat';
+    const hasKey = !!(L.api_key_info && L.api_key_info.set);
+    if(!cloud || hasKey) return '';
+    return `<div class="setup-banner" id="setupBanner">
+      <div class="ico">&#9881;</div>
+      <div class="body">
+        <b>这是个干净实例 —— 还没有任何 API Key</b>
+        <p>本项目不内置任何模型密钥。当前是云端模式（${esc(L.base_url || '')}）但未配置 Key，
+        模型调用会失败。你可以在「模型」页填入<strong>自己的 API Key</strong>与模型名；
+        或改用本地 Ollama（无需 Key，安装后开箱即用）。</p>
+        <div class="acts">
+          <button class="act primary" onclick="dismissSetup('go')">去「模型」页配置自己的 Key</button>
+          <button class="act" onclick="dismissSetup('later')">我用本地 Ollama / 稍后再说</button>
+        </div>
+      </div>
+    </div>`;
+  }catch(e){ return ''; }
+}
+
+function dismissSetup(action){
+  try{ localStorage.setItem('recollect_setup_dismissed', '1'); }catch(e){}
+  const b = $('#setupBanner'); if(b) b.remove();
+  if(action === 'go') switchTab('models');
+}
+
 async function renderOverview(){
   if(emoChart){ emoChart.dispose(); emoChart = null; }
 
-  const [o, mt, latest, health, st, gl] = await Promise.all([
+  const [o, mt, latest, health, st, gl, setupBanner] = await Promise.all([
     api('/api/overview'), api('/api/meta'),
     api('/api/events?limit=5'), api('/api/health'), api('/api/evolve/status'),
-    api('/api/goals')
+    api('/api/goals'), setupBannerHtml()
   ]);
   const ev = o.evaluation || {};
   const glActive = (gl && gl.active) || [];
@@ -756,6 +838,7 @@ async function renderOverview(){
     : `<div class="hint">还没有记忆 —— 去「记忆」页写第一条</div>`;
 
   $('#view').innerHTML = `
+  ${setupBanner}
   <div class="kpi">
     ${kpiCard('活跃记忆', o.active_events, o.archived_events ? '归档 ' + o.archived_events : '暂无归档')}
     ${kpiCard('概念', o.concepts, '最高 L' + ((ev.metrics || {}).max_level || 0))}
@@ -957,7 +1040,7 @@ async function openPersona(id){
   const d = await api('/api/personas/' + id);
   if(d.ok === false){ toast('人物不存在'); return; }
   const rels = (d.relations || []).map(r =>
-    `<div class="hit">${esc(r.other)} <span class="tag">${esc(r.type)}</span>
+    `<div class="hit">${r.other ? esc(r.other) : '<span class="hint">（人物已删除）</span>'} <span class="tag">${esc(r.type)}</span>
       <span class="hint">${(r.strength || 0).toFixed(2)}</span></div>`).join('')
     || '<span class="hint">无</span>';
   const evs = (d.events || []).map(e => `
@@ -1048,10 +1131,20 @@ function renderRelations(rows, personas){
     <button class="act primary" onclick="addRelation()">添加关系</button>
     <span class="hint">A —关系→ B · 强度 0~1</span>
   </div>`;
-  const trs = rows.map(r => `<tr>
-      <td>${esc(r.a)}</td>
+  const broken = rows.filter(r => r.broken);
+  const fixBar = broken.length
+    ? `<div class="panel" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+        <span style="color:#ffcf7d;font-size:13px">有 ${broken.length} 条关系的一端指向已删除的人物</span>
+        <button class="act" onclick="healRelations()">按关系词修复</button>
+        <span class="hint">能对上同名人物卡的自动接回；对不上的仍显示「人物已删除」，需人工处理</span>
+      </div>`
+    : '';
+  const nameCell = (r, who) => (r[who] ? esc(r[who]) : '') +
+    (r[who + '_missing'] ? ` <span class="tag" style="background:#4a2630;color:#ff9b9b">人物已删除</span>` : '');
+  const trs = rows.map(r => `<tr style="${r.broken ? 'opacity:.55' : ''}">
+      <td>${nameCell(r, 'a')}</td>
       <td><span class="tag">${esc(r.type)}</span></td>
-      <td>${esc(r.b)}</td>
+      <td>${nameCell(r, 'b')}</td>
       <td>${(r.strength || 0).toFixed(2)}</td>
       <td>
         <button class="act" onclick="editRelation('${r.id}')">编辑</button>
@@ -1061,7 +1154,16 @@ function renderRelations(rows, personas){
   const table = rows.length
     ? `<table><thead><tr><th>A</th><th>关系</th><th>B</th><th>强度</th><th>操作</th></tr></thead><tbody>${trs}</tbody></table>`
     : '<div class="empty">还没有关系 —— 在上面选两个人、填个关系词就能建立</div>';
-  return panel + table;
+  return panel + fixBar + table;
+}
+
+async function healRelations(){
+  const r = await post('/api/relations/heal');
+  if(!r.ok){ toast('修复失败'); return; }
+  toast(r.healed.length ? `已修复 ${r.healed.length} 条关系` : '没有能自动修复的（无法确认指向谁）');
+  if(r.remaining && r.remaining.length)
+    toast(`仍有 ${r.remaining.length} 条无法自动修复，已标注「人物已删除」`);
+  switchTab('relations');
 }
 
 async function addRelation(){
@@ -1376,6 +1478,20 @@ function fillSettings(s){
   const lk = $('#llmKey'), ek = $('#embedKey');
   if(lk){ lk.value = ''; lk.placeholder = keyHint(L.api_key_info) || '本地 Ollama 可留空'; }
   if(ek){ ek.value = ''; ek.placeholder = keyHint(E.api_key_info) || '本地 Ollama 可留空'; }
+  const th = $('#llmThink'); if(th) th.checked = !!L.think;
+}
+
+async function toggleThink(on){
+  // 只发 think 一个字段：不改表单里其他未保存的输入
+  const r = await put('/api/settings', {llm: {think: !!on}});
+  if(r && r.ok){
+    SETTINGS = r.settings || SETTINGS;
+    toast(on ? '已开启深度思考（更慢，正文预算已留足）' : '已关闭深度思考');
+  }else{
+    toast('切换失败，请重试');
+    const th = $('#llmThink');
+    if(th) th.checked = !on;
+  }
 }
 
 async function renderSettings(){
@@ -1400,6 +1516,16 @@ async function renderSettings(){
       <label>抽取模型<input id="llmExtract" placeholder="qwen3.5:4b / deepseek-chat" autocomplete="off"></label>
       <label>回答模型<input id="llmAnswer" placeholder="qwen3:8b / gpt-4o-mini" autocomplete="off"></label>
     </form>
+    <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line-soft)">
+      <label class="sw" for="llmThink">
+        <input type="checkbox" id="llmThink" onchange="toggleThink(this.checked)">
+        <span class="track"></span>
+        <span>
+          <span class="lbl">深度思考</span>
+          <span class="sub">关（默认）：直接回答，快且稳。开：先推理再答，复杂问题更准，但更慢更贵；已按 1024 token 追加预算，避免正文被思考挤断。改完立即生效。</span>
+        </span>
+      </label>
+    </div>
     <div style="margin-top:8px"><button class="act danger" onclick="clearKey('llm')">清除已保存 Key</button></div>
   </div>
 
@@ -1465,6 +1591,7 @@ function collectSettings(){
   const dim = parseInt(v('#embedDim') || '0', 10);
   const llm = {provider: v('#llmProvider'), base_url: v('#llmBase'),
                extract_model: v('#llmExtract'), answer_model: v('#llmAnswer')};
+  const thEl = $('#llmThink'); if(thEl) llm.think = !!thEl.checked;
   const lk = v('#llmKey'); if(lk) llm.api_key = lk;      // 留空=不修改
   const embed = {provider: v('#embedProvider'), base_url: v('#embedBase'),
                  model: v('#embedModel'), dim: dim || undefined};
@@ -1546,13 +1673,16 @@ function usageSection(u){
     <td>${m.avg_ms}</td>
     <td>${m.tokens}</td></tr>`).join('') || '<tr><td colspan="6" class="hint">暂无数据</td></tr>';
   const recent = (u.recent || []).map(r => `<tr>
-    <td>${esc((r.ts || '').slice(11, 19))}</td>
-    <td>${esc(r.role || '')}</td>
-    <td>${esc(r.model || '')}</td>
-    <td>${r.ms}</td>
+    <td class="num">${esc((r.ts || '').slice(11, 19))}</td>
+    <td>${esc(r.model || '')}<div class="hint" style="font-size:10.5px;margin-top:1px">${esc(r.role || '')}</div></td>
+    <td class="num">${r.tokens || 0}</td>
+    <td class="num">${(r.think || 0) > 0
+        ? `<span style="color:var(--warn)" title="这次思考消耗的 token">${r.think}</span>`
+        : '<span style="color:var(--fg-3)">0</span>'}</td>
+    <td class="num">${r.ms}</td>
     <td>${r.ok ? '<span class="tag">OK</span>'
                : '<span class="tag" style="background:#4a2630;color:#ff9b9b">失败</span>'}</td></tr>`).join('')
-    || '<tr><td colspan="5" class="hint">暂无调用</td></tr>';
+    || '<tr><td colspan="6" class="hint">暂无调用</td></tr>';
   return `
   <div class="kpi">
     ${kpiCard('今日调用', t.today_calls || 0, `近 ${u.days} 天 ${t.calls || 0} 次`)}
@@ -1572,8 +1702,11 @@ function usageSection(u){
     </div>
     <div class="card">
       <div class="k">最近调用</div>
-      <table style="margin-top:8px"><thead><tr><th>时间</th><th>角色</th><th>模型</th><th>ms</th><th>状态</th></tr></thead>
-      <tbody>${recent}</tbody></table>
+      <div class="hint" style="margin-top:4px">最多 20 条，框内滚动 · 「思考」列是这次被思考吃掉的 token</div>
+      <div class="scroll-box">
+        <table><thead><tr><th>时间</th><th>模型 / 角色</th><th>Token</th><th>思考</th><th>ms</th><th>状态</th></tr></thead>
+        <tbody>${recent}</tbody></table>
+      </div>
     </div>
   </div>
   <div class="panel">
@@ -1606,6 +1739,44 @@ function drawUsageChart(u){
        data: (u.by_day || []).map(d => d.tokens), itemStyle: {color: '#b9a6ff'}}
     ]
   });
+}
+
+// ---------------- 支持本项目 ----------------
+// 二维码图片放到 web/donate/ 目录即可自动显示（文件名见下）。
+// 图片不存在时 onerror 回退到占位说明，不影响页面。
+const DONATE_CHANNELS = [
+  {name:'微信', file:'wechat.png', tip:'微信扫一扫'},
+  {name:'支付宝', file:'alipay.png', tip:'支付宝扫一扫'},
+  {name:'请我喝杯咖啡', file:'coffee.png', tip:'Buy me a coffee'},
+];
+
+function renderSupport(){
+  const cards = DONATE_CHANNELS.map(c=>`
+    <div class="card donate-card">
+      <div class="t">${esc(c.name)}</div>
+      <div class="qr">
+        <img src="/static/donate/${c.file}" alt="${esc(c.name)}收款码"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='block'"
+             onload="if(this.naturalWidth>8){this.nextElementSibling.style.display='none'}">
+        <div class="ph" style="display:block"><b>${esc(c.name)}收款码</b>
+          把图片放到<br><code>web/donate/${c.file}</code><br>即可显示</div>
+      </div>
+      <div class="s">${esc(c.tip)}</div>
+    </div>`).join('');
+  $('#view').innerHTML = `
+  <div class="card" style="max-width:820px">
+    <div class="v" style="font-size:18px">支持 Recollect</div>
+    <p class="hint" style="margin:8px 0 0;line-height:1.8">
+      如果这套记忆系统帮到了你，可以考虑请作者喝杯咖啡 —— 你的支持会直接影响后续维护与新机制的开发。
+      本项目完全开源、无需付费即可使用所有功能，二维码纯属自愿。
+    </p>
+  </div>
+  <div class="donate-grid">${cards}</div>
+  <div class="card" style="max-width:820px;margin-top:14px">
+    <div class="k">想贡献而不是打赏？</div>
+    <p class="hint" style="margin:6px 0 0">提交 Issue、补充中文长对话测试用例、或写一份 benchmark 适配，
+    对项目的价值远超打赏。详见仓库 README 的 Contributing 一节。</p>
+  </div>`;
 }
 
 async function renderModels(){
@@ -1908,6 +2079,7 @@ async function switchTab(tab){
   if(tab==='models'){ renderModels(); return; }
   if(tab==='persona'){ renderPersona(); return; }
   if(tab==='data'){ renderData(); return; }
+  if(tab==='support'){ renderSupport(); return; }
   if(tab==='events'){
     const [rows, ps] = await Promise.all([api('/api/events' + evQuery()), api('/api/personas')]);
     $('#view').innerHTML = renderEvents(rows, ps);

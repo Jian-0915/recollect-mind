@@ -85,8 +85,9 @@ def test_first_request_already_has_think_off_params(monkeypatch):
     """关思考必须在**第一次**请求就带上，不能等被截断再补一次。"""
     fake = FakeRequests([FakeResp(200, ok_body(rtok=0))])
     _patch(monkeypatch, fake)
-    txt, pt, ct = llm._call_openai(CFG, "hi", "m-1", True, 300, 30, 0.7, think=False)
+    txt, pt, ct, rtok = llm._call_openai(CFG, "hi", "m-1", True, 300, 30, 0.7, think=False)
     assert txt == '{"reply":"好"}'
+    assert rtok == 0
     body = fake.calls[0]
     assert body["thinking"] == {"type": "disabled"}
     assert body["reasoning_effort"] == "none"
@@ -96,21 +97,85 @@ def test_first_request_already_has_think_off_params(monkeypatch):
 
 
 def test_endpoint_rejecting_params_falls_back_and_remembers(monkeypatch):
-    """严格端点（不认未知字段）400 时要退回原始请求，且下次不再白试。"""
+    """严格端点（所有关思考字段都不认）：逐个探测 → 全拒 → 退回原始请求，
+    且把 (端点, 模型) 记进 BAD，以后不再白试。"""
+    rej = {"error": {"message": "Unrecognized request argument: %s"}}
     fake = FakeRequests([
         FakeResp(400, {"error": {"message": "Unrecognized request argument: thinking"}}),
-        FakeResp(200, ok_body()),
-        FakeResp(200, ok_body()),          # 第二次调用：不该再带参数
+        FakeResp(400, rej),   # reasoning_effort
+        FakeResp(400, rej),   # thinking
+        FakeResp(400, rej),   # enable_thinking
+        FakeResp(400, rej),   # chat_template_kwargs
+        FakeResp(200, ok_body()),           # 退回原始 body
+        FakeResp(200, ok_body()),           # 第二次调用：不再带参数
     ])
     _patch(monkeypatch, fake)
     txt, *_ = llm._call_openai(CFG, "hi", "m-2", True, 300, 30, 0.7, think=False)
     assert txt == '{"reply":"好"}'
     assert "thinking" in fake.calls[0]
-    assert "thinking" not in fake.calls[1]      # 退回原始 body
+    BASE = {"model", "messages", "stream", "temperature", "max_tokens",
+            "response_format"}
+    extras = [sorted(set(c) - BASE) for c in fake.calls[1:5]]
+    assert all(len(e) == 1 for e in extras), extras   # 每次只带一个参数
+    assert ["reasoning_effort"] in extras and ["thinking"] in extras
+    assert "thinking" not in fake.calls[5]      # 退回原始 body
     assert ("https://example.test/v1/chat/completions", "m-2") in llm._NO_THINK_BAD
 
     llm._call_openai(CFG, "hi", "m-2", True, 300, 30, 0.7, think=False)
-    assert "thinking" not in fake.calls[2]      # 记住之后不再试
+    assert "thinking" not in fake.calls[6]      # 记住之后不再试
+
+
+def test_accepted_but_ignored_param_keeps_probing(monkeypatch):
+    """字段被收下 ≠ 生效：glm-5.3 收下 enable_thinking 照样想 157 token。
+    探测必须看到思考归零才算「认」，否则继续试下一个/放弃并如实告警。"""
+    fake = FakeRequests([
+        FakeResp(400, {"error": {"message":
+            "field ReasoningEffort invalid, should be one of: low, high, max"}}),
+        FakeResp(400, {"error": {"message":
+            "field ReasoningEffort invalid, should be one of: low, high, max"}}),
+        FakeResp(400, {"error": {"message":
+            "field Thinking.Type invalid, should be one of: enabled"}}),
+        FakeResp(200, ok_body(rtok=157)),        # enable_thinking 收下但没生效
+        FakeResp(200, ok_body(rtok=200)),        # chat_template_kwargs 同样没用
+        FakeResp(200, ok_body(rtok=180)),        # 退回原始请求：思考仍在
+    ])
+    _patch(monkeypatch, fake)
+    txt, *_ = llm._call_openai(CFG, "hi", "m-2c", True, 300, 30, 0.7, think=False)
+    assert txt == '{"reply":"好"}'
+    key = ("https://example.test/v1/chat/completions", "m-2c")
+    assert llm._NO_THINK_OK.get(key) in (None, {})      # 没有被记住的「生效」参数
+    assert key in llm._NO_THINK_BAD                      # 记为「这端点关不掉」
+    assert llm.LAST_THINK["off_honored"] is False        # 如实告警，不装关掉了
+    assert len(fake.calls) == 6
+
+
+def test_merged_rejected_but_one_param_accepted(monkeypatch):
+    """v22 修复：合并参数因**单个非法字段**被 400 时，不许整组放弃。
+
+    实测（2026-11-16 server.err.log）：sensenova 报
+    ``ReasoningEffort invalid, should be one of: low, high, max``，但
+    ``thinking:{"type":"disabled"}`` 是认的。旧逻辑整组退回 → 思考被
+    重新放出来（glm-5.3 因此想了 1202 token）。新逻辑逐个试、缓存认的那个。
+    """
+    fake = FakeRequests([
+        FakeResp(400, {"error": {"message":
+            "field ReasoningEffort invalid, should be one of: low, high, max"}}),
+        FakeResp(400, {"error": {"message":
+            "field ReasoningEffort invalid, should be one of: low, high, max"}}),
+        FakeResp(200, ok_body(rtok=0)),          # probe thinking → 认了
+        FakeResp(200, ok_body(rtok=0)),          # 第二次调用：直接用缓存参数
+    ])
+    _patch(monkeypatch, fake)
+    txt, *_ = llm._call_openai(CFG, "hi", "m-2b", True, 300, 30, 0.7, think=False)
+    assert txt == '{"reply":"好"}'
+    key = ("https://example.test/v1/chat/completions", "m-2b")
+    assert llm._cached_ok_params(key) == {"thinking": {"type": "disabled"}}
+    # 第二次调用只带缓存下来的那一个参数，不再整组合并
+    llm._call_openai(CFG, "hi", "m-2b", True, 300, 30, 0.7, think=False)
+    body = fake.calls[3]
+    assert body["thinking"] == {"type": "disabled"}
+    assert "reasoning_effort" not in body
+    assert "enable_thinking" not in body
 
 
 def test_still_thinking_is_visible_not_silent(monkeypatch):

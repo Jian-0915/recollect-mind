@@ -1,18 +1,65 @@
-"""全局配置。"""
+"""全局配置。
+
+设计原则（公开版 v22）：本文件不内置任何账号专属的模型参数或密钥。
+所有模型名 / 端点 / 维度都可通过环境变量覆盖，推荐做法见仓库根目录
+`.env.example`。默认值仅是「本地 Ollama 开箱基线」，不是任何人的私有配置：
+
+  - API Key 从不写在这里。它只保存在本机 data/*.db 的 settings 表（DPAPI 加密），
+    或在运行时由用户在 Web「模型」页填入；data/ 已被 .gitignore 排除。
+  - 想接云端模型？复制 .env.example 为 .env（或在 Web 页配置），填自己的 Key。
+
+环境变量统一前缀 NEUROMEM_，全部可选；不设置就用下面的通用默认值。
+"""
 import os
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
+
+
+def _load_dotenv(path):
+    """零依赖读取 .env：仅在系统环境变量未设置时填入，绝不覆盖已有值。
+
+    这样测试/CI 用 os.environ 注入的值始终优先，.env 只是本地便利。
+    语法支持 KEY=VALUE、可选 export 前缀与 # 注释。
+    """
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeError):
+        return
+    for line in lines:
+        s = line.strip()
+        if not s or s.startswith("#"):
+            continue
+        if s.startswith("export "):
+            s = s[7:].strip()
+        if "=" not in s:
+            continue
+        key, val = s.split("=", 1)
+        key, val = key.strip(), val.strip().strip('"').strip("'")
+        if key and key not in os.environ:  # 系统环境优先
+            os.environ[key] = val
+
+
+_load_dotenv(BASE_DIR / ".env")
+
 # HTTP 服务、MCP server、Memory SDK 都读这里，所以两边始终是同一个后台库。
 # NEUROMEM_DB 只用于测试：指向副本库做清库 / 对照实验，不设置时就是主库。
 DB_PATH = Path(os.environ.get("NEUROMEM_DB") or (DATA_DIR / "neuromem.db"))
 
-# --- Ollama ---
-OLLAMA_URL = "http://127.0.0.1:11434"
-LLM_MODEL = "qwen3.5:4b"
-ANSWER_MODEL = "qwen3:8b"  # 4B 在"生成回答"任务上会退化（输出0000），回答改用 8B
-EMBED_MODEL = "qwen3-embedding:4b"
+
+def _env(name, default):
+    """读取 NEUROMEM_<name> 环境变量；空串视同未设置。"""
+    v = os.environ.get("NEUROMEM_" + name)
+    return v if v not in (None, "") else default
+
+
+# --- 模型端点与名称（全部可覆盖；无密钥、无账号专属值）---
+OLLAMA_URL = _env("OLLAMA_URL", "http://127.0.0.1:11434")
+LLM_MODEL = _env("LLM_MODEL", "qwen3.5:4b")
+# 4B 在"生成回答"任务上会退化（输出0000），回答默认改用 8B
+ANSWER_MODEL = _env("ANSWER_MODEL", "qwen3:8b")
+EMBED_MODEL = _env("EMBED_MODEL", "qwen3-embedding:4b")
 
 # --- 防卡死参数（实测 qwen3.5:4b 开 think 遇悖论会卡死）---
 LLM_THINK = False
@@ -36,13 +83,19 @@ LLM_NO_THINK_PARAMS = (
 )
 
 LLM_MAX_TOKENS = 512
+# 开深度思考时给正文留的额外预算。max_tokens 是「思考 + 正文」的总池子，
+# 不抬高就等于让思考吃掉输出：实测画像生成 max_tokens=400、要求 100 字中文，
+# 开思考后正文只剩几十字并漂成英文碎片（2026-11-16 用户反馈的正是这个）。
+LLM_THINK_RESERVE = 1024
+# 开思考后首字延迟翻倍：超时下限跟着抬，否则调用方传的 90s 会卡在思考结束前
+LLM_THINK_TIMEOUT_MIN = 150
 LLM_TIMEOUT = 60
 LLM_TEMPERATURE = 0.2
 LLM_NUM_CTX = 4096
 
-EMBED_DIM = 2560
-EMBED_TIMEOUT = 60            # 4B 嵌入冷加载实测 ~14s，30s 余量太小
-EMBED_KEEP_ALIVE = "30m"      # ollama 常驻时长：不设则每次冷加载付 50~70s
+EMBED_DIM = int(_env("EMBED_DIM", "2560"))
+EMBED_TIMEOUT = int(_env("EMBED_TIMEOUT", "60"))   # 4B 嵌入冷加载实测 ~14s，30s 余量太小
+EMBED_KEEP_ALIVE = _env("EMBED_KEEP_ALIVE", "30m")  # ollama 常驻时长：不设则每次冷加载付 50~70s
 
 # --- 召回参数 ---
 RECALL_TOP_K = 20
