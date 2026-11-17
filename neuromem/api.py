@@ -12,8 +12,8 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (account, alias, auth, autoevolve, config, db, embed, evaluation,
-               identity, live, llm, meta, persona_card, proactive, selfnarrative,
-               settings, store, tagging, usage, working_memory)
+               identity, live, llm, meta, persona_card, proactive, rebuild,
+               selfnarrative, settings, store, tagging, usage, working_memory)
 from . import query as querymod
 from . import recall as recallmod
 from .persona import (build_profile, heal_relations, list_personas,
@@ -700,6 +700,24 @@ def _dim_warnings(saved):
         warns.append("库内已有向量维度 %s，当前嵌入模型维度 %s，两者不可比；"
                      "切换后旧记忆将检索不到，建议清空记忆重建。" % (old, new))
     return warns
+
+
+# ---------------- 全库向量重建（换嵌入模型后重算已有记忆） ----------------
+@app.post("/api/embed/rebuild")
+def start_rebuild():
+    ok, msg = rebuild.start()
+    return {"ok": ok, "message": msg, "state": rebuild.state()}
+
+
+@app.get("/api/embed/rebuild/status")
+def rebuild_status():
+    return rebuild.state()
+
+
+@app.post("/api/embed/rebuild/cancel")
+def cancel_rebuild():
+    ok, msg = rebuild.cancel()
+    return {"ok": ok, "message": msg, "state": rebuild.state()}
 
 
 @app.get("/api/settings")

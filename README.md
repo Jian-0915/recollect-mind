@@ -60,6 +60,8 @@ Two kinds of models are needed; each can be local or cloud (recommended combos a
 
 In the web "Models" page, under "Embedding model", **click a recommendation to fill the form** (fill only, no auto-save), confirm, then click "Save & apply" and verify the returned dimension with "Test embedding".
 
+**After switching models**, go to the "Data" page and click **"Rebuild vectors"** — it recomputes embeddings for all memories with the current model and writes them back, **without losing memories / personas / conversations**. The UI shows live progress (processed count, percentage, elapsed) and can be cancelled; on any error it **stops and rolls back entirely**, never leaving a half-rebuilt state. Even when old and new models are both 2560-dim, their vector spaces differ, so rebuild after every model switch to keep retrieval accurate.
+
 > DashScope `text-embedding-v3` and the `bge-large` family are natively 1024-dim and can't reach 2560, so they are excluded.
 > SenseNova's Token Plan OpenAI-compatible gateway (`https://token.sensenova.cn/v1`) has **no embeddings endpoint**; its "Piccolo Embedding" belongs to a separate SenseCore API needing its own key/base_url. So when using SenseNova chat/extract models, keep embeddings on local Ollama — do not call `/embeddings` on the same base_url.
 

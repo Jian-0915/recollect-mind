@@ -140,6 +140,11 @@
   .pill{display:inline-block;margin:2px 4px 2px 0;padding:3px 10px;border-radius:999px;
     background:var(--surface-2);border:1px solid var(--line);color:var(--fg-2);font-size:11.5px}
   .hint{color:var(--fg-3);font-size:12px}
+  /* 向量重建进度 */
+  .rb-bar{height:10px;border-radius:6px;background:var(--bg-2);border:1px solid var(--line-soft);overflow:hidden;margin:10px 0 6px}
+  .rb-fill{height:100%;width:0;background:linear-gradient(90deg,#3d7dff,#5aa9ff);transition:width .35s ease}
+  .rb-fill.err{background:#c0392b}.rb-fill.done{background:#2e9e5b}
+  .rb-meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--fg-3);font-size:12px}
   /* ==== 图表 / 空态 ==== */
   .chart{height:440px;background:var(--surface);border:1px solid var(--line);
     border-radius:var(--r);padding:6px}
@@ -1536,7 +1541,7 @@ function applyEmbedRecommend(name){
   set('#embedProvider', r.provider); set('#embedBase', base);
   set('#embedModel', r.model); set('#embedDim', r.dim);
   const warn = `这些都是 2560 维，与默认库一致。但注意：维度相同不代表向量空间相同——`
-    + `换模型后旧记忆仍建议重建向量 / 清库重灌，检索质量才可靠。`;
+    + `换模型后请到「数据」页点「重建向量」，用新模型重算全部记忆（不丢数据）。`;
   $('#setResult').textContent = `已填入嵌入推荐「${name}」，记得点「保存并立即生效」。${warn}`;
 }
 
@@ -2068,6 +2073,21 @@ async function renderData(){
     <button class="act primary" onclick="exportData()">导出 JSON</button>
   </div>
 
+  <div class="card" style="margin-top:14px" id="rebuildCard">
+    <div class="k">向量重建</div>
+    <div class="hint" style="margin:6px 0 12px">换过嵌入模型后，用当前模型为全部 <b id="rbEvents">—</b> 条记忆重新计算向量，<b>保留所有记忆 / 人物 / 会话，不清库</b>。全程遇错即停并回滚，不会留下半重建状态。</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="act primary" id="rbStart" onclick="startRebuild()">开始重建</button>
+      <button class="act danger" id="rbCancel" onclick="cancelRebuild()" style="display:none">取消</button>
+      <span class="hint" id="rbStatus"></span>
+    </div>
+    <div id="rbProgress" style="display:none">
+      <div class="rb-bar"><div class="rb-fill" id="rbFill"></div></div>
+      <div class="rb-meta"><span id="rbCount"></span><span id="rbEta"></span></div>
+    </div>
+    <div class="hint" id="rbResult" style="margin-top:8px"></div>
+  </div>
+
   <div class="card" style="margin-top:14px;border-color:#4a2630">
     <div class="k" style="color:#ff9b9b">危险区</div>
     <div class="hint" style="margin:6px 0 12px">「清空数据」会清掉全部业务表：记忆、碎片、概念、人物、关系、目标、成长 / 漂移日志、自叙事、标签与别名，以及 v9~v11 新增的<b>会话轮次、陪伴心境、L2 采纳日志、再巩固版本链</b>、情绪与用量；自增计数也归零。新增机制表会自动纳入，不必手工维护清单。模型配置与账号保留，不可恢复。<br><b>L0 人设卡与固定身份宪法不会被清掉</b>：清库清的是经历，不是「我是谁 / 我怎么说话」；要改请去「人设」页。</div>
@@ -2077,6 +2097,83 @@ async function renderData(){
       <button class="act" onclick="resetDerived()">只清派生数据</button>
     </div>
   </div>`;
+  const rbE = $('#rbEvents'); if(rbE) rbE.textContent = o.active_events || 0;
+  refreshRebuildState();
+}
+
+let rbTimer = null;
+async function refreshRebuildState(){
+  try{
+    const s = await api('/api/embed/rebuild/status');
+    paintRebuildState(s);
+    if(s.running){
+      if(rbTimer) clearInterval(rbTimer);
+      rbTimer = setInterval(pollRebuild, 700);
+    }
+  }catch(e){}
+}
+async function pollRebuild(){
+  try{ paintRebuildState(await api('/api/embed/rebuild/status')); }catch(e){ return; }
+}
+function paintRebuildState(s){
+  const box=$('#rbProgress'), fill=$('#rbFill'), cnt=$('#rbCount'),
+        eta=$('#rbEta'), st=$('#rbStatus'), res=$('#rbResult'),
+        start=$('#rbStart'), cancelBtn=$('#rbCancel');
+  if(!box) return;
+  const running=!!s.running;
+  if(start) start.style.display = running ? 'none' : '';
+  if(cancelBtn) cancelBtn.style.display = running ? '' : 'none';
+  if(running){
+    box.style.display='';
+    const pct = s.total ? Math.round(s.done*100/s.total) : 0;
+    fill.className='rb-fill'; fill.style.width=pct+'%';
+    if(cnt) cnt.textContent = `已处理 ${s.done} / ${s.total}（${pct}%）· 模型 ${s.model||'—'}`;
+    if(eta) eta.textContent = s.elapsed_ms ? `已用 ${(s.elapsed_ms/1000).toFixed(1)}s` : '';
+    if(st) st.textContent = s.phase==='writing' ? '写入中（事务提交）…' : '正在重新嵌入…';
+    if(res) res.textContent='';
+  }else{
+    if(s.phase==='done'){
+      box.style.display=''; fill.className='rb-fill done'; fill.style.width='100%';
+      if(cnt) cnt.textContent=`完成：已重建 ${s.rebuilt} 条向量`;
+      if(eta) eta.textContent=`用时 ${(s.elapsed_ms/1000).toFixed(1)}s`;
+      if(st) st.textContent='';
+      if(res) res.textContent='✓ 重建完成，记忆 / 人物 / 会话均未丢失。';
+    }else if(s.phase==='error'){
+      box.style.display=''; fill.className='rb-fill err';
+      if(cnt) cnt.textContent=`已停止于 ${s.done} / ${s.total}`;
+      if(eta) eta.textContent='';
+      if(st) st.textContent='';
+      if(res) res.textContent='✗ '+(s.error||'重建失败')+'。原向量未改动，请检查模型 / Key 后重试。';
+    }else if(s.phase==='cancelled'){
+      box.style.display=''; fill.className='rb-fill';
+      if(cnt) cnt.textContent=`已取消（处理到 ${s.done} / ${s.total}）`;
+      if(eta) eta.textContent='';
+      if(st) st.textContent='';
+      if(res) res.textContent='已取消，原向量未改动。';
+    }else{
+      box.style.display='none';
+      if(st) st.textContent='';
+      if(res) res.textContent='';
+    }
+  }
+  if(rbTimer && !running){ clearInterval(rbTimer); rbTimer=null; }
+}
+async function startRebuild(){
+  try{
+    const r=await post('/api/embed/rebuild',{});
+    if(!r.ok){ toast(r.message||'启动失败'); return; }
+    toast('已开始重建');
+    if(rbTimer) clearInterval(rbTimer);
+    rbTimer=setInterval(pollRebuild,700);
+    paintRebuildState(r.state);
+  }catch(e){ toast('启动失败：'+(e.message||e)); }
+}
+async function cancelRebuild(){
+  try{
+    const r=await post('/api/embed/rebuild/cancel',{});
+    toast(r.message||'已请求取消');
+    paintRebuildState(r.state);
+  }catch(e){ toast('取消失败'); }
 }
 
 async function exportData(){

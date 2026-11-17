@@ -150,6 +150,41 @@ _THINK_LEAD = re.compile(
 _ORPHAN_THINK_CLOSE = re.compile(
     r"</(think|thinking|reasoning|analysis|thought)>\s*", re.I)
 
+# v22.2：不再依赖"思考长什么样"的清单，改为检测**元话语**——思考的本质是
+# "谈论任务本身"（用户希望我…/接下来分析…/Let me check…），而不是回答内容。
+# 只有文本里出现这些迹象才启动分段筛选；没有迹象的原始文本原样返回，零误伤。
+_META_TALK = re.compile(
+    r"用户希望我|用户要求我|用户想让我|根据下面|基于下面|接下来(分析|整合|梳理)|"
+    r"首先(需要|确认|分析)|然后(整合|分析)|最后检查|确保没有|注意语言|避免机械|"
+    r"the user wants|let me (think|analy|check)|i (need|should) to|"
+    r"analyze the|drafting the|synthesi|^\s*[-*]?\s*\d+[\.\)]\s+\*\*|"
+    r"^\s*(task|step|requirement|constraint)\s*[:：]", re.I | re.M)
+_ZH_CHAR = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _strip_meta_talk(text):
+    """元话语兜底：文本含思考迹象时，挑出最像正文的一段。
+
+    JSON / 纯思考 / 单段文本都不动——JSON 交给调用方解析，单段说明没有
+    "思考+正文"混排，误切风险大于收益。
+    """
+    if not _META_TALK.search(text):
+        return text
+    if text[:1] in ("{", "["):        # 结构化输出，不碰
+        return text
+    parts = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
+    if len(parts) < 2:
+        return text
+
+    def score(p):
+        hits = len(_META_TALK.findall(p))
+        cn = len(_ZH_CHAR.findall(p))
+        ratio = cn / max(len(p), 1)
+        # 元话语命中惩罚最重；非中文段惩罚；同分取信息量大的
+        return -hits * 10 - (0 if ratio >= 0.5 else 5) + min(cn, 120) / 120
+
+    return max(parts, key=score).strip()
+
 
 def strip_think_wrapper(text):
     """剥掉混在正文里的思考块。
@@ -171,7 +206,7 @@ def strip_think_wrapper(text):
         # 引导行之后：有空行就取空行后的正文；没有空行视为整段都是推理
         parts = re.split(r"\n\s*\n", rest, maxsplit=1)
         out = parts[1].strip() if len(parts) == 2 else ""
-    return out
+    return _strip_meta_talk(out) if out else out
 
 
 def _openai_message(data):
@@ -369,6 +404,11 @@ def generate(prompt, *, model=None, json_mode=False, max_tokens=None, timeout=No
         usage.record("llm", role, provider, real_model, False,
                      (time.time() - t0) * 1000, error=str(e))
         raise
+
+    # v22.2 统一出口净化：过去 strip 只在 _openai_message 里做，本地 Ollama
+    # 路径完全漏网；且每来一种新泄漏形态就要在调用方补一次。现在所有 provider、
+    # 所有调用点的返回值都在这里过一遍，调用方不必各自防守。
+    txt = strip_think_wrapper(txt)
 
     usage.record("llm", role, provider, real_model, True,
                  (time.time() - t0) * 1000, pt, ct, think_tokens=rtok)

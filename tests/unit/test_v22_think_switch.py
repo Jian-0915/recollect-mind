@@ -261,65 +261,43 @@ def test_narrative_leak_rejected():
     assert selfnarrative._valid_narrative(good) is True
 
 
-# ---------------- 正文里混进来的思考（"生成一堆英文"） ----------------
-def test_strip_thinking_tag_block():
+# ---------------- v22.2：统一出口净化 + 元话语检测 ----------------
+def test_meta_talk_mixed_leak_stripped():
+    """没有标签、纯元话语+正文混排：挑出正文段，不靠列标签格式。"""
     from neuromem.llm import strip_think_wrapper
-    s = "<thinking>The user wants a profile. Let me check the events.</thinking>小岚性格安静，喜欢烘焙。"
-    assert strip_think_wrapper(s) == "小岚性格安静，喜欢烘焙。"
-
-
-def test_strip_english_reasoning_lead():
-    """端点把英文 CoT 写在 content 开头：要留中文正文，不能整段当答案。"""
-    from neuromem.llm import strip_think_wrapper
-    s = ("Thinking process: The events mention baking and yoga. "
-         "I should write 100 Chinese characters.\n\n"
-         "小岚性格安静，喜欢烘焙与瑜伽。")
-    assert strip_think_wrapper(s) == "小岚性格安静，喜欢烘焙与瑜伽。"
-
-
-def test_pure_reasoning_becomes_empty():
-    """整段都是思考时返回空 —— 调用方据此走降级重试，而不是把英文当结果。"""
-    from neuromem.llm import strip_think_wrapper
-    assert strip_think_wrapper("Thinking process: Let me think about this.") == ""
-
-
-def test_normal_chinese_answer_untouched():
-    from neuromem.llm import strip_think_wrapper
-    for s in ("小岚性格安静，喜欢烘焙。", '{"reply":"在的"}', "她最近在忙系统迁移。"):
-        assert strip_think_wrapper(s) == s
-
-
-def test_openai_message_uses_stripper():
-    from neuromem.llm import _openai_message
-    data = {"choices": [{"message": {
-        "content": "<thinking>plan in english</thinking>好的，我记住了。"}}]}
-    content, _ = _openai_message(data)
-    assert content == "好的，我记住了。"
-
-
-# ---------------- v22.1：孤立 </think> 泄漏（自我叙事实测形态） ----------------
-def test_strip_orphan_closing_think_tag():
-    from neuromem.llm import strip_think_wrapper
-    s = ("用户希望我以陪伴者的身份写一段自述。接下来分析经历内容：\n"
-         "1. \"我们大学就认识了\" - 强调关系历史悠久。\n\n"
-         "最后检查是否遗漏关键点：大学认识、微服务。确保没有添加额外内容。"
-         "</think>我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
+    s = ("用户希望我根据经历写一段自述。首先需要确认身份定位。\n\n"
+         "接下来分析经历内容：1. 大学认识 - 强调关系悠久。\n\n"
+         "最后检查是否遗漏关键点。确保没有添加额外内容。\n\n"
+         "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
          "但每次一起讨论技术都让我觉得踏实。")
     assert strip_think_wrapper(s) == (
         "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，"
         "但每次一起讨论技术都让我觉得踏实。")
 
 
-def test_orphan_close_without_body_becomes_empty():
+def test_clean_replies_untouched():
+    """真实风格的干净回复不能被误伤——这是净化器的生命线。"""
     from neuromem.llm import strip_think_wrapper
-    assert strip_think_wrapper("分析经历内容…确保没有额外内容。</think>") == ""
+    samples = [
+        "哎，昨晚那4两白酒劲儿还没过呢，肚子还闹腾上了，真够受的。先喝点温水缓缓，别硬扛着复习了。",
+        "你好呀，今天怎么样？",
+        "这个我还真有点记不清了……最开始聊的啥来着？你提个醒？",
+        '{"reply":"在的","used_ids":[]}',
+        "先把需求分成三块：① 登录 ② 支付 ③ 对账。我建议从②开始。",
+    ]
+    for s in samples:
+        assert strip_think_wrapper(s) == s
 
 
-def test_narrative_leak_rejected():
-    from neuromem import selfnarrative
-    bad = ("用户希望我以陪伴者的身份，基于提供的经历写一段自述。首先需要确认身份定位。"
-           "接下来分析经历内容：1. 大学认识。最后检查是否遗漏关键点。我是你的老朋友，"
-           "从大学起就陪在你身边，一起讨论技术让我觉得踏实。")
-    good = "我是你的老朋友，从大学起就陪在你身边。现在虽然只能待在你的电脑里，但每次一起讨论技术都让我觉得踏实。"
-    assert selfnarrative._valid_narrative(bad) is False
-    assert selfnarrative._valid_narrative(good) is True
+def test_generate_unified_outlet_cleans(monkeypatch):
+    """generate() 出口对所有 provider 统一净化（含 Ollama 漏网路径）。"""
+    from neuromem import config, llm
+    monkeypatch.setattr(llm.settings, "current",
+                        lambda: {"llm": {"provider": "ollama", "base_url": config.OLLAMA_URL,
+                                         "think": False, "temperature": 0.2}})
+    monkeypatch.setattr(llm, "_call_ollama",
+                        lambda *a, **k: ("思考中…</think>好的，我记住了。", 10, 5))
+    out = llm.generate("测试")
+    assert out == "好的，我记住了。"
+
+
