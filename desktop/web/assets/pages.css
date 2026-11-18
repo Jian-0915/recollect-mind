@@ -1639,3 +1639,89 @@
 .research-btn { color: var(--clay-700); }
 .research-btn:hover { color: var(--clay-800); border-color: var(--clay-400); }
 .research-btn:disabled { opacity: .55; cursor: default; }
+
+/* ==========================================================================
+   搜索服务（通用 MCP 管理器）—— 密钥加密存本机，前端只见掩码
+   ========================================================================== */
+.mcp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.mcp-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-12);
+  background: var(--surface-2);
+}
+
+.mcp-item.is-active { border-color: var(--clay-400); }
+
+.mcp-item__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.mcp-item__name {
+  color: var(--ink);
+  font-size: var(--fs-12);
+  font-weight: 500;
+}
+
+.mcp-item__badge {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--clay-600);
+  color: var(--ink-inverse);
+  font-size: var(--fs-10);
+}
+
+.mcp-item__meta {
+  margin: 0 0 10px;
+  color: var(--ink-3);
+  font-size: var(--fs-11);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.mcp-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.mcp-editor {
+  margin-top: 14px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-12);
+  background: var(--surface-2);
+}
+
+.mcp-editor[hidden] { display: none; }
+
+.mcp-editor__head {
+  margin-bottom: 14px;
+  color: var(--ink);
+  font-size: var(--fs-12);
+  font-weight: 600;
+}
+
+.mcp-editor__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.mcp-test-result {
+  color: var(--moss-600, var(--ink-2));
+  font-size: var(--fs-11);
+  line-height: 1.5;
+}
+
+.mcp-test-result.is-bad { color: var(--danger, #c0392b); }

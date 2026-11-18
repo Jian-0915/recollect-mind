@@ -81,12 +81,18 @@ def _iso_now() -> str:
 
 
 class AnySearchProvider:
+    """通用 MCP Streamable HTTP 客户端（端点/密钥/工具名可配）。
+
+    默认指向 AnySearch；换成任意说同一套 MCP 协议的服务，只需改这三个参数。
+    """
+
     name = "anysearch"
 
     def __init__(self, endpoint: str | None = None, api_key: str | None = None,
-                 timeout: float = 30.0):
+                 tool: str = "search", timeout: float = 30.0):
         self.endpoint = endpoint or _ANYSEARCH_URL
         self._key_override = api_key
+        self.tool = (tool or "search").strip() or "search"
         self.timeout = timeout
 
     def _rpc(self, method: str, params: dict) -> dict:
@@ -96,7 +102,7 @@ class AnySearchProvider:
             "Accept": "application/json, text/event-stream",
             "User-Agent": "nianzi-memory/1.0",
         }
-        key = self._key_override if self._key_override is not None else _api_key()
+        key = self._key_override if self._key_override else _api_key()
         if key:
             headers["Authorization"] = f"Bearer {key}"
         req = urllib.request.Request(
@@ -122,12 +128,24 @@ class AnySearchProvider:
         query = (query or "").strip()
         if not query:
             raise SearchError("搜索词为空")
-        result = self._rpc("tools/call", {
-            "name": "search",
-            "arguments": {"query": query, "max_results": max(1, min(10, max_results))},
+        return self.call(self.tool, {
+            "query": query, "max_results": max(1, min(10, max_results)),
         })
+
+    def call(self, tool: str, arguments: dict) -> list[SearchResult]:
+        """调指定工具并把返回解析成条目（通用入口）。"""
+        result = self._rpc("tools/call", {"name": tool, "arguments": arguments})
         text = _first_content_text(result)
         return parse_search_text(text)
+
+    def test_connection(self) -> dict:
+        """连接测试：列工具 + 探一次连通，返回可诊断信息。"""
+        result = self._rpc("tools/list", {})
+        names = [t.get("name") for t in (result.get("tools") or [])
+                 if isinstance(t, dict) and t.get("name")]
+        return {"ok": True, "tools": names,
+                "has_search": self.tool in names,
+                "endpoint": self.endpoint}
 
     def extract(self, url: str) -> str:
         url = (url or "").strip()
@@ -279,12 +297,37 @@ def sanitize_query(text: str, private_terms: Iterable[str] = ()) -> str:
 # Provider 工厂
 # --------------------------------------------------------------------------
 
+def provider_from_server(server: dict) -> AnySearchProvider:
+    """从一条 MCP 服务配置构造客户端。"""
+    return AnySearchProvider(
+        endpoint=(server or {}).get("url") or _ANYSEARCH_URL,
+        api_key=(server or {}).get("api_key") or None,
+        tool=(server or {}).get("tool") or "search",
+    )
+
+
 def get_provider(name: str | None = None) -> SearchProvider:
-    """按配置返回 provider。目前只有 anysearch，留接口给将来接 HTTP API。"""
-    choice = (name or config._env("SEARCH_PROVIDER", "anysearch")).strip().lower()
-    if choice in ("", "anysearch", "mcp"):
-        return AnySearchProvider()
-    raise SearchError(f"未知的搜索 provider: {choice}")
+    """返回当前 provider。
+
+    优先用 settings 里启用的 MCP 服务（界面可配、密钥 DPAPI 加密）；
+    没有配置时回落到内置 AnySearch（匿名或环境变量 key）。
+    显式传 name 可锁定某个条目（按 id）。
+    """
+    from . import settings
+
+    if name:
+        for srv in settings.mcp_load():
+            if srv.get("id") == name:
+                return provider_from_server(srv)
+        if name in ("anysearch", "mcp"):
+            return AnySearchProvider()
+        raise SearchError(f"未知的搜索 provider: {name}")
+
+    active = settings.mcp_active()
+    if active:
+        return provider_from_server(active)
+    # 显式清空列表 = 关闭外部搜索
+    raise SearchError("没有启用的 MCP 搜索服务")
 
 
 def search(query: str, max_results: int = 5,

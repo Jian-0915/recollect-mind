@@ -1245,6 +1245,35 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
 
+## v35：搜索服务自己配（通用 MCP 管理器，2026-11-18）
+
+### 为什么改
+
+v34 把 AnySearch 端点写死在 `tools.py`，密钥只能从环境变量读。用户点破关键事实：**「我有密钥，这才是让你配 MCP 接口的原因，我可以自己配置 MCP 服务让它使用」**。当时界面没有填密钥的入口、设置页没有搜索分区，等于 v34 交付的是匿名模式、用户的密钥完全没用上——和初衷是反的。用户选了范围更大的「通用 MCP 管理器」（能加任意自建服务），不做「只填 AnySearch 密钥」的简版。
+
+### 设计取舍
+
+- **复用现成密钥机制，不另起炉灶**：模型密钥早就用 `settings` 表 + DPAPI（`secret.protect/unprotect`）加密。搜索服务配置走同一套，存 `settings` 表 `key='mcp_servers'`，每条 `api_key` 单独加密，绑定当前 Windows 用户。绝不写 `.env`/环境变量/仓库。
+- **通用性落在传输协议**：所有条目走标准 MCP Streamable HTTP（JSON-RPC 2.0），这是 MCP 通用传输——只要服务说这套协议就能接。`AnySearchProvider` 构造时接收 endpoint/api_key/tool，改名后适用于任意 server；`provider_from_server()` 从配置条目造客户端。
+- **掩码回传 + 留空沿用**：`mcp_public()` 只回 `****尾四位`+位数，明文不出后端。PUT 保存时若某条 `api_key` 为空或 `****` 开头，用旧库里的值回填——避免「界面只显示掩码，一保存就把密钥洗成掩码串」的经典坑。
+- **保存立即生效**：`tools.get_provider()` 从 `settings.mcp_active()` 读启用项，不再依赖环境变量；`_touch_version()` 广播缓存失效，上层答问链完全不用改。
+- **结果解析兼容两格式**：AnySearch 返回 Markdown，通用服务可能返回 JSON 数组，解析器都认。
+
+### 踩坑
+
+- `entity.kind_of()` 的坑是 v34 的，v35 属其上的配置层，未再触碰实体判定。
+- 测试环境存在真实的 `data/access_token.txt`，鉴权中间件会拦 TestClient 请求——MCP 路由测试用 monkeypatch 放行鉴权，不碰真实 token 文件。
+- 测试直接写 `settings` 表前没建表导致失败，先调一次 `mcp_load()` 触发建表即可（conftest 已把 DB 隔离到临时库）。
+- 前端 `test_connection` 返回字段是 `tools` / `has_search` / `endpoint`（**没有** `connected`），按真实字段渲染，别猜。
+
+### 顺手修掉：主动关心测试的时间敏感 flaky
+
+深夜跑全量挂了 2 项 `test_proactive.py`（`created==0`、`KeyError: 'generated'`），白天却全绿。根因不是本轮改动：`motivation.pick` 有「23 点–8 点不吵你」的静默门，这两个用例用系统当前时间，夜里必然被门控挡住。修法是给 `tick/peek/motivation.pick` 注入固定白天时间。踩了两个小坑：① `now` 必须带时区（和 `proactive._now()` 一致），否则和带 `+08:00` 的 `last_turn_at` 相减抛 `TypeError`、被 `tick` 的 try 吞成 error；② 用 `datetime(...,15:00,tzinfo=utc).astimezone()` 在本地是 23 点，又踩静默门——得用 UTC 07:00 才是北京时间 15:00。修后 6 项稳定通过，与跑测时刻无关。
+
+### 验证
+
+新增 `tests/unit/test_settings_mcp.py`（8 项：加密/掩码/默认值/规范化/缓存失效）、`test_mcp_routes.py`（8 项：列表/保存掩码沿用/测试/设默认/鉴权放行），扩 `test_tools.py`（配置驱动 provider）。针对性 **33 passed**；修掉时间敏感用例后 `test_proactive.py` **6 passed**。前端 `node --check` 通过，桌面端 4 个 MCP 路由注册齐全。
+
 ## v34：外部知识闭环 + AnySearch MCP（2026-11-18）
 
 用户诉求：聊到乌江寨，她能自己去查；知识按关键字可检索、能反哺回答；把网页查询 MCP `https://api.anysearch.com/mcp` 接进来，让她「有使用工具的能力」。这是 ROADMAP 自进化章节 F1–F4/F4b/F6 的落地。

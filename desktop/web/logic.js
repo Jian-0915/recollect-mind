@@ -111,6 +111,16 @@
   const knowledge    = (limit) => get('/api/knowledge?limit=' + (limit || 30));
   const knowledgeFind = (q, limit) => get('/api/knowledge/search?q=' + encodeURIComponent(q || '') + '&limit=' + (limit || 8));
 
+  /* ==================== MCP 服务管理（通用，可填密钥/自建服务） ==================== */
+  // 列出服务（密钥掩码）+ 当前启用 id。
+  const mcpServers = () => get('/api/mcp/servers');
+  // 整体保存；api_key 留空或 **** 开头 = 沿用原密钥（后端合并）。
+  const mcpSave   = (servers) => put('/api/mcp/servers', { servers: servers });
+  // 测试连通：传 id 测已存条目，或传临时 url/api_key/tool 试探（不落库）。
+  const mcpTest   = (cfg) => post('/api/mcp/test', cfg || {});
+  // 设某条为启用（其余禁用）。
+  const mcpActive = (id) => post('/api/mcp/active', { id: id });
+
   /* ==================== 桌面壳能力 ==================== */
   const meta = () => get('/api/desktop/meta');
   // 系统通知与打开网页：pywebview 未就绪时静默降级。
@@ -141,6 +151,7 @@
     ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
     settings, settingsSave, models,
     research, knowledge, knowledgeFind,
+    mcpServers, mcpSave, mcpTest, mcpActive,
     meta, notify, notifyReply, openWeb
   };
 })(window);

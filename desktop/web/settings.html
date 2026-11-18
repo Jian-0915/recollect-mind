@@ -79,6 +79,14 @@
         <span class="index__meta">音色 · 语速</span>
         <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
       </a>
+      <a class="index__row" href="#/mcp">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="2"></circle><circle cx="5" cy="18" r="2"></circle><circle cx="19" cy="18" r="2"></circle><path d="M10.6 6.7L6.4 16.3M13.4 6.7l4.2 9.6M7 18h10"></path></svg>
+        </span>
+        <span class="index__name">搜索服务</span>
+        <span class="index__meta">MCP · 密钥</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
       <a class="index__row" href="#/relation">
         <span class="index__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.3-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.7-7 9-7 9z"></path></svg>
@@ -268,6 +276,56 @@
               <div class="field">
                 <button class="btn btn--ghost btn--sm" type="button" id="ttsTryBtn">试听一句</button>
                 <p class="field__hint" id="ttsTryHint">合成约需几秒，请稍等。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 搜索服务（外部 MCP） -->
+        <section class="detail__section" data-section="mcp">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">搜索服务</h3>
+              <span class="group__meta">外部知识 · 不进陪伴记忆</span>
+            </div>
+            <p class="group__intro">她查资料用的服务。可以填自己的密钥提额，也可以换成你自己搭的 MCP 服务。密钥只存在这台电脑、加密保存，不会写进对话或仓库。</p>
+            <div class="group__fields">
+              <div class="mcp-list" id="mcpList">
+                <p class="field__hint">正在读取服务列表…</p>
+              </div>
+
+              <div class="field">
+                <button class="btn btn--ghost btn--sm" type="button" id="mcpAddBtn">+ 添加服务</button>
+                <p class="field__hint">服务需支持 MCP Streamable HTTP（JSON-RPC 2.0）。默认工具名是 search，可改。</p>
+              </div>
+
+              <div class="mcp-editor" id="mcpEditor" hidden>
+                <div class="mcp-editor__head" id="mcpEditorTitle">添加服务</div>
+                <div class="field">
+                  <div class="field__head"><label class="field__label" for="mcpName">名称</label></div>
+                  <input class="input" id="mcpName" type="text" placeholder="例如：AnySearch / 自建搜索" maxlength="40">
+                </div>
+                <div class="field">
+                  <div class="field__head"><label class="field__label" for="mcpUrl">服务地址</label></div>
+                  <input class="input" id="mcpUrl" type="url" placeholder="https://api.anysearch.com/mcp">
+                  <p class="field__hint">MCP 端点地址，必须是 http(s)。</p>
+                </div>
+                <div class="field">
+                  <div class="field__head"><label class="field__label" for="mcpKey">API 密钥</label><span class="field__note" id="mcpKeyInfo">可选</span></div>
+                  <input class="input" id="mcpKey" type="password" placeholder="留空 = 不修改 / 匿名访问" autocomplete="off">
+                  <p class="field__hint">留空表示沿用原来的密钥；**** 开头表示已保存。密钥加密存储，界面只显示尾四位。</p>
+                </div>
+                <div class="field">
+                  <div class="field__head"><label class="field__label" for="mcpTool">搜索工具名</label></div>
+                  <input class="input" id="mcpTool" type="text" value="search" placeholder="search">
+                  <p class="field__hint">调用工具时用的名字，默认 search。自建服务若用了别的名字，在这里改。</p>
+                </div>
+                <div class="mcp-editor__actions">
+                  <button class="btn btn--primary btn--sm" type="button" id="mcpSaveBtn">保存</button>
+                  <button class="btn btn--ghost btn--sm" type="button" id="mcpTestBtn">测试连接</button>
+                  <button class="btn btn--quiet btn--sm" type="button" id="mcpCancelBtn">取消</button>
+                  <span class="mcp-test-result" id="mcpTestResult"></span>
+                </div>
               </div>
             </div>
           </div>

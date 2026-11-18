@@ -35,7 +35,9 @@
 - 私人话题、人名、称呼**绝不外发**——查询词只保留实体本身，不带对话上下文。
 - 每次查询留痕（何时 / 为何 / 查了什么），可一键关掉；查不到就明说，不编。
 
-**MCP 接入（11-18 已落地）**：WorkBuddy 平台侧的搜索工具（domain_search / 网页搜索）只活在当前会话里，念兹作为独立进程确实调不到。但用户提供了 AnySearch 的 MCP 端点 `https://api.anysearch.com/mcp`（Streamable HTTP，MCP 2025-03-26），实测可直连、匿名可用、无需握手。工具层按 provider 无关设计（见 `neuromem/tools.py`），念兹只认「搜索」这个动作，换 provider 只改配置。**已完成，见 CHANGELOG v34。**
+**MCP 接入（11-18 已落地）**：WorkBuddy 平台侧的搜索工具（domain_search / 网页搜索）只活在当前会话里，念兹作为独立进程确实调不到。但用户提供了 AnySearch 的 MCP 端点 `https://api.anysearch.com/mcp`（Streamable HTTP，MCP 2025-03-26），实测可直连、匿名可用、无需握手。工具层按 provider 无关设计（见 `neuromem/tools.py`），念兹只认「搜索」这个动作。**已完成，见 CHANGELOG v34。**
+
+**MCP 服务自己配（11-18 已落地）**：搜索服务不再写死——设置页「搜索服务」分区可增删/切换任意 MCP Streamable HTTP 服务、填 API 密钥提额、设默认、测连通；密钥 DPAPI 加密只存本机、界面只见掩码。用户明确要「自己配置 MCP 服务让它使用」，这是那一步。**已完成，见 CHANGELOG v35。**
 
 **红线**（碰了就算做错）：
 
@@ -184,6 +186,7 @@
 | 日期 | 编号 | 说明 |
 |---|---|---|
 | 11-18 | F1–F4/F4b/F6 | 外部知识闭环：意图层 + 独立知识库(FTS5 trigram) + AnySearch MCP 可插拔工具层 + 实体/脱敏闸 + 带出处答问 + 桌面端查证按钮与知识面板；见 CHANGELOG v34 |
+| 11-18 | 配置层 | 通用 MCP 管理器：设置页增删/切换任意 MCP 服务、填密钥提额、设默认、测连通，密钥 DPAPI 加密只存本机；见 CHANGELOG v35 |
 | 11-18 | V12 | 品牌定名「念兹」+ 启动器脱离控制台（pythonw + 日志落盘 + 调试版），见 CHANGELOG v33 |
 | 11-18 | V11 | 桌面端未响应热修：js_api 不持 Window、通知重 import 移入守护线程，根治递归反射卡死；见 CHANGELOG v32 |
 | 11-18 | V10 | 回复就绪系统通知：文字+语音都准备好才发可点击系统通知，点击回聊天页；见 CHANGELOG v31 |

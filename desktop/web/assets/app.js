@@ -1140,6 +1140,7 @@ function fireReplyNotice(text, voice) {
       basic: { title: "基本", sub: "名字、身份和性格，是它每句话的底子。" },
       voice: { title: "说话方式", sub: "风格、长度、称呼与口头禅，决定它一句话怎么说。" },
       audio: { title: "语音播放", sub: "音色、语速和音量——她开口念出来时的声音。" },
+      mcp: { title: "搜索服务", sub: "她查资料用的 MCP 服务，可填密钥、可换成自建服务。" },
       relation: { title: "关系与相处", sub: "它多久找你一次、怎么关心你、什么绝对不做。" },
       examples: { title: "示范语气", sub: "两组对话，只学语气，不当真实经历。" },
       identity: { title: "固定身份宪法", sub: "优先级高于人设，冲突时以这里为准。" },
@@ -1247,6 +1248,202 @@ function fireReplyNotice(text, voice) {
           if (state === "playing" && tryHint) tryHint.textContent = "正在播放，再点按钮可以停。";
         });
       }
+    }
+
+    /* ---------- 搜索服务（通用 MCP 管理器） ----------
+     * 密钥只从后端拿掩码，前端永不接触明文；保存时留空/掩码 = 沿用旧值。
+     * 与陪伴记忆无关，纯能力配置。 */
+    function initMcpSettings() {
+      var listEl = $("#mcpList");
+      var editor = $("#mcpEditor");
+      if (!listEl || !editor) return;
+
+      var fName = $("#mcpName");
+      var fUrl = $("#mcpUrl");
+      var fKey = $("#mcpKey");
+      var fTool = $("#mcpTool");
+      var editorTitle = $("#mcpEditorTitle");
+      var keyInfo = $("#mcpKeyInfo");
+      var testResult = $("#mcpTestResult");
+      var addBtn = $("#mcpAddBtn");
+      var saveBtn = $("#mcpSaveBtn");
+      var testBtn = $("#mcpTestBtn");
+      var cancelBtn = $("#mcpCancelBtn");
+
+      var servers = [];       // 服务端返回的掩码版列表
+      var activeId = null;
+      var editingId = null;   // null = 新增
+
+      function api() { return window.DeskAPI && DeskAPI.mcpServers && window.DeskAPI; }
+      function say(text, bad) {
+        if (!testResult) return;
+        testResult.textContent = text || "";
+        testResult.classList.toggle("is-bad", !!bad);
+      }
+      function keyLabel(info) {
+        if (!info || !info.set) return "未设置（匿名，限流更严）";
+        return (info.len || 0) + " 位 · " + (info.tail || "****");
+      }
+
+      function render() {
+        listEl.textContent = "";
+        if (!servers.length) {
+          var empty = document.createElement("p");
+          empty.className = "field__hint";
+          empty.textContent = "还没有服务。点下面的「添加服务」填一个 MCP 端点。";
+          listEl.appendChild(empty);
+          return;
+        }
+        servers.forEach(function (s) {
+          var row = document.createElement("div");
+          row.className = "mcp-item";
+          if (s.id === activeId) row.classList.add("is-active");
+
+          var head = document.createElement("div");
+          head.className = "mcp-item__head";
+          var name = document.createElement("span");
+          name.className = "mcp-item__name";
+          name.textContent = s.name || s.id;
+          head.appendChild(name);
+          if (s.id === activeId) {
+            var badge = document.createElement("span");
+            badge.className = "tag mcp-item__badge";
+            badge.textContent = "使用中";
+            head.appendChild(badge);
+          }
+          row.appendChild(head);
+
+          var meta = document.createElement("p");
+          meta.className = "mcp-item__meta";
+          meta.textContent = (s.url || "") + "  ·  工具 " + (s.tool || "search") +
+            "  ·  密钥 " + keyLabel(s.api_key_info);
+          row.appendChild(meta);
+
+          var acts = document.createElement("div");
+          acts.className = "mcp-item__actions";
+          function actBtn(label, cls, fn) {
+            var b = document.createElement("button");
+            b.type = "button";
+            b.className = "btn btn--" + cls + " btn--sm";
+            b.textContent = label;
+            b.addEventListener("click", fn);
+            acts.appendChild(b);
+          }
+          if (s.id !== activeId) {
+            actBtn("设为默认", "ghost", function () {
+              var a = api(); if (!a) return;
+              a.mcpActive(s.id).then(function (r) {
+                if (r && r.ok) apply(r); else say((r && r.error) || "设置失败", true);
+              }).catch(function () { say("设置失败", true); });
+            });
+          }
+          actBtn("编辑", "quiet", function () { openEditor(s); });
+          actBtn("删除", "quiet", function () {
+            if (!window.confirm("删除服务「" + (s.name || s.id) + "」？")) return;
+            var a = api(); if (!a) return;
+            var next = servers.filter(function (x) { return x.id !== s.id; });
+            a.mcpSave(next).then(function (r) {
+              if (r && r.ok) { apply(r); }
+              else say((r && r.error) || "删除失败", true);
+            }).catch(function () { say("删除失败", true); });
+          });
+          row.appendChild(acts);
+          listEl.appendChild(row);
+        });
+      }
+
+      function apply(r) {
+        servers = (r && r.servers) || [];
+        activeId = (r && r.active_id) || null;
+        render();
+      }
+
+      function load() {
+        var a = api();
+        if (!a) { say("接口尚未就绪，刷新页面重试", true); return; }
+        a.mcpServers().then(function (r) {
+          if (r && r.ok) apply(r);
+          else say((r && r.error) || "读取失败", true);
+        }).catch(function () { say("读取失败，请刷新重试", true); });
+      }
+
+      function openEditor(s) {
+        editingId = s ? s.id : null;
+        if (editorTitle) editorTitle.textContent = s ? ("编辑 · " + (s.name || s.id)) : "添加服务";
+        fName.value = s ? (s.name || "") : "";
+        fUrl.value = s ? (s.url || "") : "";
+        fKey.value = "";   // 永远不清空显示明文：留空 = 沿用旧密钥
+        fTool.value = s ? (s.tool || "search") : "search";
+        if (keyInfo) keyInfo.textContent = s ? keyLabel(s.api_key_info) : "可选";
+        say("");
+        editor.hidden = false;
+        try { fName.focus(); } catch (e) {}
+      }
+      function closeEditor() {
+        editor.hidden = true;
+        editingId = null;
+        say("");
+      }
+
+      function formServer() {
+        return {
+          id: editingId || "",
+          name: (fName.value || "").trim(),
+          url: (fUrl.value || "").trim(),
+          api_key: fKey.value || "",
+          tool: (fTool.value || "").trim() || "search",
+          enabled: editingId ? (activeId === editingId) : false
+        };
+      }
+
+      if (addBtn) addBtn.addEventListener("click", function () { openEditor(null); });
+      if (cancelBtn) cancelBtn.addEventListener("click", closeEditor);
+
+      if (saveBtn) {
+        saveBtn.addEventListener("click", function () {
+          var a = api(); if (!a) return;
+          var row = formServer();
+          if (!/^https?:\/\//.test(row.url)) { say("服务地址必须是 http(s) 开头", true); return; }
+          var next = servers.slice();
+          var idx = -1;
+          for (var i = 0; i < next.length; i++) {
+            if (next[i].id === row.id) { idx = i; break; }
+          }
+          if (idx >= 0) next[idx] = row;
+          else { row.id = "srv_" + Date.now().toString(36); next.push(row); }
+          saveBtn.disabled = true;
+          say("正在保存…");
+          a.mcpSave(next).then(function (r) {
+            saveBtn.disabled = false;
+            if (r && r.ok) { apply(r); closeEditor(); }
+            else say((r && r.error) || "保存失败", true);
+          }).catch(function () { saveBtn.disabled = false; say("保存失败", true); });
+        });
+      }
+
+      if (testBtn) {
+        testBtn.addEventListener("click", function () {
+          var a = api(); if (!a) return;
+          var cfg = formServer();
+          if (!/^https?:\/\//.test(cfg.url)) { say("先填一个合法的 http(s) 服务地址", true); return; }
+          testBtn.disabled = true;
+          say("正在测试连接…");
+          a.mcpTest(cfg).then(function (r) {
+            testBtn.disabled = false;
+            if (r && r.ok) {
+              var msg = "连接正常";
+              if (r.latency != null) msg += " · " + r.latency + "s";
+              msg += " · 工具 " + ((r.tools || []).length) + " 个";
+              if (r.has_search === false) msg += "（工具名可能不对）";
+              say(msg, r.has_search === false);
+            } else {
+              say((r && r.error) || "连接失败", true);
+            }
+          }).catch(function () { testBtn.disabled = false; say("连接失败", true); });
+        });
+      }
+
+      load();
     }
 
     var RANGE_LABELS = {
@@ -2096,6 +2293,7 @@ function fireReplyNotice(text, voice) {
 
     loadPersona();
     initTtsSettings();
+    initMcpSettings();
 
     // 关窗/离开对话页时停掉语音，不让声音留在后台
     window.addEventListener("pagehide", function () { stopSpeaking(); });

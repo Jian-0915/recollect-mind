@@ -404,6 +404,89 @@ def _build_server(port):
             if c is not None:
                 c.close()
 
+    # 外部 MCP 服务管理：桌面独立进程也需要（共用 api_app 对象但不共享注册时机）
+    @api_app.get("/api/mcp/servers")
+    def _desk_mcp_servers():
+        from neuromem import settings as _settings
+        try:
+            items = _settings.mcp_load()
+            active = _settings.mcp_active(items)
+            return {"ok": True, "servers": _settings.mcp_public(items),
+                    "active_id": (active or {}).get("id")}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "servers": [], "active_id": None}
+
+    @api_app.put("/api/mcp/servers")
+    async def _desk_mcp_save(request: Request):
+        from neuromem import settings as _settings
+        try:
+            payload = await request.json()
+            items = (payload or {}).get("servers")
+            if not isinstance(items, list):
+                return {"ok": False, "error": "servers 必须是数组"}
+            old = {s.get("id"): s for s in _settings.mcp_load()}
+            merged = []
+            for raw in items:
+                row = dict(raw or {})
+                key = row.get("api_key")
+                rid = row.get("id")
+                if (key is None or (isinstance(key, str)
+                                    and (not key.strip() or key.startswith("****")))):
+                    row["api_key"] = (old.get(rid) or {}).get("api_key", "")
+                merged.append(row)
+            saved = _settings.mcp_save(merged)
+            active = _settings.mcp_active(saved)
+            return {"ok": True, "servers": _settings.mcp_public(saved),
+                    "active_id": (active or {}).get("id")}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
+    @api_app.post("/api/mcp/test")
+    async def _desk_mcp_test(request: Request):
+        from neuromem import settings as _settings, tools as _tools
+        import time as _time
+        t0 = _time.time()
+        try:
+            p = await request.json()
+            p = p or {}
+            sid = p.get("id")
+            if sid:
+                srv = next((s for s in _settings.mcp_load()
+                            if s.get("id") == sid), None)
+                if not srv:
+                    return {"ok": False, "error": "找不到该服务"}
+                for f in ("url", "api_key", "tool"):
+                    if f in p:
+                        srv[f] = p[f]
+                if isinstance(srv.get("api_key"), str) and srv["api_key"].startswith("****"):
+                    srv["api_key"] = next((s for s in _settings.mcp_load()
+                                           if s.get("id") == sid), {}).get("api_key", "")
+            else:
+                srv = {"url": p.get("url") or "", "api_key": p.get("api_key") or "",
+                       "tool": p.get("tool") or "search"}
+            res = _tools.provider_from_server(srv).test_connection()
+            res["latency"] = round(_time.time() - t0, 2)
+            return {"ok": True, **res}
+        except Exception as e:
+            return {"ok": False, "latency": round(_time.time() - t0, 2),
+                    "error": "%s: %s" % (type(e).__name__, str(e)[:300])}
+
+    @api_app.post("/api/mcp/active")
+    async def _desk_mcp_active(request: Request):
+        from neuromem import settings as _settings
+        try:
+            payload = await request.json()
+            sid = str((payload or {}).get("id") or "")
+            items = _settings.mcp_load()
+            if not any(s.get("id") == sid for s in items):
+                return {"ok": False, "error": "找不到该服务"}
+            for s in items:
+                s["enabled"] = (s.get("id") == sid)
+            saved = _settings.mcp_save(items)
+            return {"ok": True, "servers": _settings.mcp_public(saved), "active_id": sid}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     wrapped = _DesktopAuth(api_app, token)
 
     config = uvicorn.Config(

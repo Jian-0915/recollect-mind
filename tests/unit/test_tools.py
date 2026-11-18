@@ -102,6 +102,57 @@ def test_unknown_provider_raises():
         tools.get_provider("nonexistent")
 
 
+def test_get_provider_uses_active_server(conn):
+    """get_provider 从 settings 的启用服务构造端点/密钥/工具名。"""
+    from neuromem import settings
+    settings.mcp_save([{
+        "name": "自建", "url": "https://my-mcp.example.com/mcp",
+        "api_key": "sk-xyz", "tool": "web_search", "enabled": True,
+    }])
+    p = tools.get_provider()
+    assert p.endpoint == "https://my-mcp.example.com/mcp"
+    assert p.tool == "web_search"
+    assert p._key_override == "sk-xyz"
+
+
+def test_get_provider_no_server_raises(conn):
+    from neuromem import settings
+    settings.mcp_save([])
+    with pytest.raises(tools.SearchError):
+        tools.get_provider()
+
+
+def test_get_provider_by_id(conn):
+    from neuromem import settings
+    settings.mcp_save([
+        {"id": "a", "name": "A", "url": "https://a.com/mcp", "tool": "search", "enabled": True},
+        {"id": "b", "name": "B", "url": "https://b.com/mcp", "tool": "s", "enabled": False},
+    ])
+    assert tools.get_provider("b").endpoint == "https://b.com/mcp"
+
+
+def test_provider_uses_custom_tool_name(monkeypatch):
+    p = tools.AnySearchProvider(tool="web_search")
+    seen = {}
+
+    def fake_rpc(method, params):
+        seen.update(params)
+        return {"content": [{"type": "text", "text": SAMPLE}]}
+
+    monkeypatch.setattr(p, "_rpc", fake_rpc)
+    p.search("乌江寨")
+    assert seen["name"] == "web_search"
+
+
+def test_test_connection(monkeypatch):
+    p = tools.AnySearchProvider(tool="search")
+    monkeypatch.setattr(p, "_rpc", lambda m, pa: {
+        "tools": [{"name": "search"}, {"name": "extract"}]})
+    got = p.test_connection()
+    assert got["ok"] is True and got["has_search"] is True
+    assert "search" in got["tools"]
+
+
 def test_rpc_body_stream_compat():
     sse = 'event: message\ndata: {"jsonrpc":"2.0","id":1,"result":{"ok":1}}\n\n'
     assert tools._parse_rpc_body(sse, "text/event-stream")["result"]["ok"] == 1

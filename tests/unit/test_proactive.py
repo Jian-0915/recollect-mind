@@ -4,7 +4,17 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
+from datetime import datetime, timedelta, timezone
+
 from neuromem import companion, db, proactive
+
+# 固定白天时间：motivation.pick 有「23 点–8 点不打扰」的门控，
+# 用系统当前时间会让这两个用例在深夜跑必然失败（白天却通过）。
+# 必须带时区（与 proactive._now 一致），否则和 last_turn_at 相减抛 TypeError。
+# 用北京时间 15:00（UTC+8 = UTC 07:00），别用 UTC 15:00——那在本地是 23:00，
+# 恰好又踩进静默门。
+_DAY = datetime(2026, 11, 18, 7, 0, 0, tzinfo=timezone.utc).astimezone(
+    timezone(timedelta(hours=8)))
 
 
 def _db(tmp_path):
@@ -90,7 +100,7 @@ def test_tick_peek_consume_and_cooldown(tmp_path):
     c.execute("DELETE FROM proactive_suggestions")
     c.commit()
 
-    r = proactive.tick(c)
+    r = proactive.tick(c, now=_DAY)
     assert r["proactive"]["created"] == 1
 
     # 防堆积：已有未消费候选就不再产出
@@ -114,7 +124,7 @@ def test_tick_peek_consume_and_cooldown(tmp_path):
 
     # 冷却期内不会换个说法再问同一件事
     from neuromem import motivation
-    again = motivation.pick(c)
+    again = motivation.pick(c, now=_DAY)
     assert again["ok"] is False and ("冷却" in again["reason"] or "刚说过话" in again["reason"])
     c.close()
 
@@ -124,8 +134,8 @@ def test_fabrication_falls_back_to_plain(tmp_path):
     proactive._ensure(c)
     c.execute("DELETE FROM proactive_suggestions")
     c.commit()
-    proactive.tick(c)
-    got = proactive.peek(c, llm_fn=lambda p, **k: "上次那个 IPA，我最近也想换口味。")
+    proactive.tick(c, now=_DAY)
+    got = proactive.peek(c, now=_DAY, llm_fn=lambda p, **k: "上次那个 IPA，我最近也想换口味。")
     assert got["generated"] is False
     # 兜底句有好几条（按心情随机取），但底线是：不冒充有经历，且确实提了那件事
     assert "我最近" not in got["text"] and not proactive._fabrication(got["text"])

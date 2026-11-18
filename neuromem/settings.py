@@ -1,7 +1,7 @@
-"""运行时模型配置：provider / base_url / api_key / 各角色模型名。
+"""运行时配置：模型（key='models'）+ 外部 MCP 服务（key='mcp_servers'）。
 
-配置存 settings 表（key='models'），进程内缓存；保存后立即生效，无需重启。
-未配置时回落到 config.py 的默认值（Ollama 本地）。
+配置存 settings 表，进程内缓存；保存后立即生效，无需重启。
+密钥一律 DPAPI 加密落库，掩码对外展示；未配置时回落到 config.py 默认值。
 """
 import json
 import threading
@@ -202,6 +202,115 @@ def public(cfg=None):
             section["api_key"] = mask_key(raw)
             section["api_key_info"] = key_info(raw)
     return out
+
+
+# --------------------------------------------------------------------------
+# 外部 MCP 服务（通用管理器）
+# --------------------------------------------------------------------------
+# 一条服务 = {id, name, url, api_key, tool, enabled}。协议统一走 MCP
+# Streamable HTTP / JSON-RPC 2.0；tool 是搜索工具名（默认 search）。
+_MCP_KEY = "mcp_servers"
+_MCP_DEFAULT = [{
+    "id": "anysearch",
+    "name": "AnySearch",
+    "url": "https://api.anysearch.com/mcp",
+    "api_key": "",
+    "tool": "search",
+    "enabled": True,
+}]
+_MCP_FIELDS = {"id", "name", "url", "api_key", "tool", "enabled"}
+
+
+def _mcp_normalize(items):
+    """规范化条目列表：补默认值、过滤未知字段、保证 id 唯一。"""
+    out, seen = [], set()
+    for raw in items or []:
+        if not isinstance(raw, dict):
+            continue
+        row = {k: v for k, v in raw.items() if k in _MCP_FIELDS}
+        url = str(row.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            continue
+        rid = str(row.get("id") or "").strip() or ("srv_" + url[8:28].replace("/", "_"))
+        if rid in seen:
+            continue
+        seen.add(rid)
+        out.append({
+            "id": rid,
+            "name": str(row.get("name") or rid).strip()[:40],
+            "url": url,
+            "api_key": str(row.get("api_key") or "").strip(),
+            "tool": str(row.get("tool") or "search").strip() or "search",
+            "enabled": bool(row.get("enabled", True)),
+        })
+    return out
+
+
+def mcp_load(conn=None):
+    """读服务列表，解密密钥。无配置时返回内置 AnySearch 默认条目。"""
+    own = conn is None
+    c = conn or db.connect()
+    try:
+        _ensure_table(c)
+        row = c.execute("SELECT value FROM settings WHERE key=?", (_MCP_KEY,)).fetchone()
+        raw = json.loads(row["value"]) if row else None
+        c.commit()
+    finally:
+        if own:
+            c.close()
+    if raw is None:
+        return [dict(x) for x in _MCP_DEFAULT]
+    out = _mcp_normalize(raw)
+    for item in out:
+        k = item.get("api_key") or ""
+        if secret.is_encrypted(k):
+            item["api_key"] = secret.unprotect(k)
+    return out
+
+
+def mcp_save(items, conn=None):
+    """保存服务列表，密钥逐条 DPAPI 加密，广播版本失效。"""
+    global _cache, _cache_ver
+    norm = _mcp_normalize(items)
+    own = conn is None
+    c = conn or db.connect()
+    try:
+        _ensure_table(c)
+        persisted = []
+        for item in norm:
+            row = dict(item)
+            row["api_key"] = secret.protect(row.get("api_key") or "")
+            persisted.append(row)
+        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)",
+                  (_MCP_KEY, json.dumps(persisted, ensure_ascii=False)))
+        c.commit()
+    finally:
+        if own:
+            c.close()
+    if own:
+        _touch_version()
+    return norm
+
+
+def mcp_public(items=None):
+    """对外展示：密钥掩码 + 可核对信息，绝不回显明文。"""
+    out = []
+    for item in (mcp_load() if items is None else items):
+        row = dict(item)
+        raw = row.get("api_key") or ""
+        row["api_key"] = mask_key(raw)
+        row["api_key_info"] = key_info(raw)
+        out.append(row)
+    return out
+
+
+def mcp_active(items=None):
+    """当前启用的服务：优先第一个 enabled，找不到就退回第一个。"""
+    lst = mcp_load() if items is None else items
+    for item in lst:
+        if item.get("enabled"):
+            return item
+    return lst[0] if lst else None
 
 
 def ollama_base(url):

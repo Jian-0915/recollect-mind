@@ -828,6 +828,89 @@ def put_settings(cfg: Dict[str, Any]):
     return {"ok": True, "settings": settings.public(saved), "warnings": _dim_warnings(saved)}
 
 
+# ---------------- 外部 MCP 服务管理 ----------------
+@app.get("/api/mcp/servers")
+def get_mcp_servers():
+    """列出服务（密钥掩码），以及当前启用项。"""
+    try:
+        items = settings.mcp_load()
+        active = settings.mcp_active(items)
+        return {"ok": True, "servers": settings.mcp_public(items),
+                "active_id": (active or {}).get("id")}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "servers": [], "active_id": None}
+
+
+@app.put("/api/mcp/servers")
+def put_mcp_servers(payload: Dict[str, Any]):
+    """整体保存服务列表。api_key 留空/掩码 = 沿用原值。"""
+    items = (payload or {}).get("servers")
+    if not isinstance(items, list):
+        return {"ok": False, "error": "servers 必须是数组"}
+    try:
+        old = {s.get("id"): s for s in settings.mcp_load()}
+        merged = []
+        for raw in items:
+            row = dict(raw or {})
+            key = row.get("api_key")
+            rid = row.get("id")
+            # 掩码回传 = 不修改，用旧密钥（旧库里已是明文，mcp_save 会重新加密）
+            if (key is None or (isinstance(key, str)
+                                and (not key.strip() or key.startswith("****")))):
+                prev = old.get(rid) or {}
+                row["api_key"] = prev.get("api_key", "")
+            merged.append(row)
+        saved = settings.mcp_save(merged)
+        active = settings.mcp_active(saved)
+        return {"ok": True, "servers": settings.mcp_public(saved),
+                "active_id": (active or {}).get("id")}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/mcp/test")
+def test_mcp_server(p: Optional[Dict[str, Any]] = None):
+    """测试某条服务的连通性：可用已存条目，或传临时 url/key/tool 试探。"""
+    p = p or {}
+    t0 = time.time()
+    try:
+        sid = p.get("id")
+        if sid:
+            srv = next((s for s in settings.mcp_load() if s.get("id") == sid), None)
+            if not srv:
+                return {"ok": False, "error": "找不到该服务"}
+            # 表单里若带了新值，覆盖已存值再测（不落库）
+            for f in ("url", "api_key", "tool"):
+                if f in p:
+                    srv[f] = p[f]
+            if isinstance(srv.get("api_key"), str) and srv["api_key"].startswith("****"):
+                srv["api_key"] = next((s for s in settings.mcp_load()
+                                       if s.get("id") == sid), {}).get("api_key", "")
+        else:
+            srv = {"url": p.get("url") or "", "api_key": p.get("api_key") or "",
+                   "tool": p.get("tool") or "search"}
+        prov = tools.provider_from_server(srv)
+        res = prov.test_connection()
+        res["latency"] = round(time.time() - t0, 2)
+        return {"ok": True, **res}
+    except Exception as e:
+        return {"ok": False, "latency": round(time.time() - t0, 2),
+                "error": "%s: %s" % (type(e).__name__, str(e)[:300])}
+
+
+@app.post("/api/mcp/active")
+def set_mcp_active(p: Dict[str, Any]):
+    """设某条服务为启用（其余置为禁用）。"""
+    sid = str((p or {}).get("id") or "")
+    items = settings.mcp_load()
+    if not any(s.get("id") == sid for s in items):
+        return {"ok": False, "error": "找不到该服务"}
+    for s in items:
+        s["enabled"] = (s.get("id") == sid)
+    saved = settings.mcp_save(items)
+    return {"ok": True, "servers": settings.mcp_public(saved), "active_id": sid}
+
+
 @app.post("/api/settings/test")
 def test_settings(p: Optional[Dict[str, Any]] = None):
     p = p or {}
