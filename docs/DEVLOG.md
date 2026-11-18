@@ -1195,8 +1195,36 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 全量单测 466 passed。端到端（复用残留 tts-server）：precache 0.01s 返回 → 后台 5.52s 合成 153644 字节 wav → ensure 命中 0.01s → audio 路由吐出完整 RIFF wav（153644 字节）。按钮逻辑核实：源码里 `speakBtn.hidden` 与 `ensureTtsAvailable` 均已清零。
 
-## 服务管理
+## v30：音色一致性（2026-11-18）
 
+### 为什么改
+
+用户反馈"听见这些音色都和我设置的不一样"，且强调是在桌面端设置页改的、改完重开过。这是个体验 bug，但排查过程很长——因为**逐层实测全链路逻辑都是对的**：
+
+1. **服务端音色生效**：同句 5 音色 MD5 全不同，uncle_fu 203564 字节（男声）vs vivian 138284 字节，时长/过零率各异；同音色同句两次 MD5 完全一致（可复现）。排除"模型不认 voice"。
+2. **后端传参正确**：`post('/api/tts/precache', {text, voice})` 走 JSON body；后端 `precache→cache_key→_synthesize` 全程带 voice；端到端切音色后 key 与音频 MD5 都变。排除"key 没绑音色"。
+3. **localStorage 一致**：设置页与对话页同源（`127.0.0.1:port/desk/`）、同一 key `ache.tts`、只有一份 app.js。排除"偏好没共享"。
+
+### 真正的根因（浏览器层）
+
+反查缓存文件对应的 agent 回复，发现**同一段历史对话里音色混杂**：早期/晚期多是 vivian，中间几句 serena——用户中途在试听页切过音色。缓存 key 含音色所以不会串味，点播也传当前音色，**理论上对**。剩下两个浏览器层缺陷：
+
+- **`<audio>` 元素复用**：`ttsPlayer` 全局单例，反复换同一个元素的 `src`；WebView2/Chromium 偶发沿用旧解码缓冲，导致换了音色却听到上一次的声音。
+- **音频长缓存**：`/api/tts/audio/{key}` 返回 `Cache-Control: public, max-age=86400`（缓存一天），进一步放大旧音频被复用的概率。
+
+另外，用户心智模型是"音色=当前全局偏好，改了就该全变"，而旧缓存按历史音色"复活"让他觉得乱——需要改音色后主动重新预热。
+
+### 修法
+
+- 播放器每次 `speak` 用 `new Audio()`，旧的 pause+清 src+load 后丢弃。
+- 音频路由改 `no-store`（key 是内容 hash，无需浏览器缓存）。
+- `setTtsPrefs` 音色真变时写计数器 `ache.tts.voiceChange`；对话页监听 `storage`（跨页）与 `focus`（同窗口跳转兜底），调 `rewarmAllBubbles()` 按新音色重新预热所有气泡；气泡存 `data-tts-text` 原文。
+
+### 验证
+
+全量单测 466 passed；新增断言锁住音频路由必须 no-store。
+
+## 服务管理
 ```bash
 python service.py start      # 后台启动，轮询 /api/health 确认就绪
 python service.py stop       # 停止（先校验目标进程是 python，避免误杀）

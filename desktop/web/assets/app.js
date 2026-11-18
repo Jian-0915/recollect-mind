@@ -255,13 +255,17 @@ var ttsPlayer = {
   volume: 1.0,       // 音量，设置页写入
 
   _el: function () {
-    if (!this.audio) {
-      this.audio = new Audio();
-      this.audio.preload = "auto";
+    // 每次播放新建元素：复用同一个 <audio> 换 src 时，WebView2/Chromium
+    // 偶发沿用旧解码缓冲，导致换了音色却听到上一次的声音。新建最稳。
+    if (this.audio) {
+      try { this.audio.pause(); this.audio.src = ""; this.audio.load(); } catch (e) {}
     }
-    this.audio.playbackRate = this.rate;
-    this.audio.volume = Math.max(0, Math.min(1, this.volume));
-    return this.audio;
+    var a = new Audio();
+    a.preload = "auto";
+    a.playbackRate = this.rate;
+    a.volume = Math.max(0, Math.min(1, this.volume));
+    this.audio = a;
+    return a;
   },
 
   _setState: function (s) {
@@ -322,6 +326,7 @@ function ttsWarm(text, voice) {
 /* 语音偏好（音色/语速/音量）独立存 localStorage，不进人设版本系统——
    这是设备播放偏好，不是人格，改它不该产生人设新版本。两页共用同一份。 */
 var TTS_PREFS_KEY = "ache.tts";
+var TTS_VOICE_CHANGE_KEY = "ache.tts.voiceChange";  // 音色变更计数器，跨页通知重新预热
 function getTtsPrefs() {
   var d = { voice: "vivian", rate: 1.0, volume: 1.0 };
   try {
@@ -335,7 +340,24 @@ function getTtsPrefs() {
   return d;
 }
 function setTtsPrefs(p) {
+  var old = getTtsPrefs();
   try { localStorage.setItem(TTS_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
+  // 音色真变了才计数，触发对话页按新音色重新预热所有气泡
+  if (p && p.voice && p.voice !== old.voice) {
+    try {
+      var n = parseInt(localStorage.getItem(TTS_VOICE_CHANGE_KEY) || "0", 10) || 0;
+      localStorage.setItem(TTS_VOICE_CHANGE_KEY, String(n + 1));
+    } catch (e) {}
+  }
+}
+
+// 按当前音色重新预热对话页所有已有气泡（音色变更后调用）。
+function rewarmAllBubbles() {
+  var voice = getTtsPrefs().voice;
+  var btns = document.querySelectorAll(".speak-btn[data-tts-text]");
+  for (var i = 0; i < btns.length; i++) {
+    ttsWarm(btns[i].getAttribute("data-tts-text"), voice);
+  }
 }
 
 // 语音按钮恒定显示：可用性由点播时的接口返回决定（失败 toast），不再用
@@ -423,6 +445,7 @@ function stopSpeaking() { ttsPlayer.stop(); }
       var speakBtn = document.createElement("button");
       speakBtn.className = "speak-btn";
       speakBtn.type = "button";
+      speakBtn.setAttribute("data-tts-text", text);   // 音色变更后按新音色重新预热用
       speakBtn.setAttribute("aria-label", "念出来");
       speakBtn.title = "念出来";
       function speakIcon(state) {
@@ -841,6 +864,13 @@ function stopSpeaking() { ttsPlayer.stop(); }
     // 首次延后 10 秒，别和回填历史抢启动；之后每 60 秒问一次
     window.setTimeout(pollProactive, 10000);
     window.setInterval(pollProactive, 60000);
+
+    // 设置页改音色后，按新音色重新预热所有历史气泡：
+    // 跨标签页/页面走 storage 事件；同页（本窗口跳设置再返回）用 focus 兜底。
+    window.addEventListener("storage", function (e) {
+      if (e && e.key === TTS_VOICE_CHANGE_KEY) rewarmAllBubbles();
+    });
+    window.addEventListener("focus", rewarmAllBubbles);
   }
 
   /* ==========================================================================

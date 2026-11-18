@@ -224,6 +224,8 @@ def test_audio_route_cache_hit(client, monkeypatch, tmp_path):
     assert r.content == b"RIFFfake"
     assert "wav" in r.headers["content-type"]
     assert r.headers["x-tts-cache"] == "hit"
+    # 音频不能长缓存：换音色后必须重新取，否则 WebView 可能沿用旧音色缓冲
+    assert "no-store" in r.headers["cache-control"]
 
 
 def test_audio_route_invalid_key_404(client, monkeypatch, tmp_path):

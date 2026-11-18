@@ -281,7 +281,7 @@ def _build_server(port):
             return JSONResponse({"ok": False, "error": "语音尚未就绪"}, status_code=404)
         return FileResponse(
             tts._cache_file(key), media_type="audio/wav",
-            headers={"Cache-Control": "public, max-age=86400", "X-TTS-Cache": "hit"},
+            headers={"Cache-Control": "no-store", "X-TTS-Cache": "hit"},
         )
 
     # 桌面端专用的历史回填接口：只读 conversation_turns，供启动时恢复对话气泡。
