@@ -34,6 +34,15 @@ def test_deep_link_to_memory_page(client):
     assert account.COOKIE in r.headers.get("set-cookie", "")
 
 
+def test_deep_link_to_knowledge_page(client):
+    """外部知识页也在白名单内——桌面端能直达「她知道了什么」的后台页。"""
+    c, tok = client
+    r = _get(c, {"t": tok, "tab": "knowledge"})
+    assert r.status_code == 307
+    assert r.headers["location"] == "/?tab=knowledge"
+    assert account.COOKIE in r.headers.get("set-cookie", "")
+
+
 def test_unknown_tab_falls_back_to_overview(client):
     """tab 不在白名单就回概览，绝不把外部输入拼进跳转地址。"""
     c, tok = client
@@ -56,3 +65,14 @@ def test_backend_serves_tab_param(client):
     assert r.status_code == 200
     assert "switchTab" in r.text       # 深链切换脚本在
     assert "PAGE_META" in r.text
+    assert 'data-tab="knowledge"' in r.text   # 外部知识 tab 在后台可见
+
+
+def test_backend_exposes_knowledge_api(client):
+    """后台能读到独立知识库：/api/knowledge 返回 ok 与 items。"""
+    c, tok = client
+    r = c.get("/api/knowledge", params={"limit": 5})
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("ok") is True
+    assert isinstance(body.get("items"), list)

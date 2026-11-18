@@ -9,6 +9,20 @@ v12 的机制说明保留在 README.zh.md 的「记忆机制」「L0 固定身�
 
 ---
 
+## v37：知识抽屉「关不掉」与后台看不到知识（2026-11-18）
+
+**动机**：用户实测反馈两件事——①「她知道了什么」面板点开后关闭按钮没反应、回不了对话；②她联网查到的东西在后台管理里找不到。
+
+**根因（①）**：抽屉 `<aside class="drawer" id="knowledgeDrawer">` 当初写的时候被放进了 `<div class="toast-wrap">`。这个容器为了「toast 不挡对话」设了 `pointer-events: none`。CSS 的 `pointer-events` 是**会继承**的——抽屉连同它的关闭按钮、搜索框、F5 开关一起变成了「点击穿透」，看着在、点不动。教训：**`pointer-events: none` 容器里绝不能放交互层**；抽屉这类覆盖层应该是 body 的顶层独立元素。
+
+**修法**：把抽屉挪到 `.toast-wrap` 外；顺手在抽屉本身加 `data-close`，让点侧栏外遮罩空白处也能关（关闭监听检查 `event.target` 的 `data-close` 属性）。
+
+**根因（②）与边界**：外部知识从设计上就在独立 `data/knowledge.db`（FTS5 trigram + 向量双路），与主库 `events/concepts` 物理隔离——这是「不污染陪伴记忆」的红线，不能为了「后台能看见」把它并进主库。正确做法是后台**只读**挂一个视图去查独立库。于是给 `web/index.html` 加了「外部知识」tab，复用现成的 `/api/knowledge` 与 `/api/knowledge/search`，只展示不写入；桌面深链白名单 `_WEB_TABS` 同步加 `knowledge`。
+
+**防回归**：新增 `tests/unit/test_knowledge_drawer_dom.py`，直接读源码断言抽屉不在 `.toast-wrap` 块内、且带 `data-close`；`test_desktop_bridge.py` 补了深链到 knowledge 和 `/api/knowledge` 可读的断言。完整套件 567 项全过。实测独立库当时有 5 条乌江寨相关记录，均带来源网址与抓取时间。
+
+---
+
 ## v14：人设卡（后台统一设置，无 schema 变更）
 
 宪法（`identity`）只规定「不可逾越的底线」，人设卡（`persona_card`）决定「怎么演自己」：名字、身份、性格、说话方式（风格 / 长度 / 称呼 / 口头禅 / 避免）、关系与主动性、关心方式、绝对不做、情绪基线、示范语气。两者同属 **L0**：人工版本化、运行时只读、清库豁免、导出包含、不能被对话改写；冲突时宪法优先。表 `persona_card / persona_card_history` 幂等自建，旧库零迁移。

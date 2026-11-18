@@ -147,7 +147,7 @@ def _build_server(port):
     from fastapi.responses import RedirectResponse
 
     # 后台标签白名单：深链只允许跳这些页，避免把 query 拼进跳转造成怪地址
-    _WEB_TABS = {"overview", "events", "concepts", "personas", "relations",
+    _WEB_TABS = {"overview", "events", "knowledge", "concepts", "personas", "relations",
                  "graph", "growth", "chat", "models", "persona", "data", "support"}
 
     @api_app.get("/desk-web-login")

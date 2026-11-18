@@ -180,9 +180,10 @@
   </div>
 </aside>
 
-<div class="toast-wrap">
 <!-- ==================== 外部知识抽屉（她自己查来的东西） ==================== -->
-<aside class="drawer" id="knowledgeDrawer" hidden aria-label="她知道了什么">
+<!-- 注意：此抽屉必须留在 .toast-wrap 之外。后者 pointer-events:none，
+     若把抽屉嵌进去，关闭按钮/搜索/开关会全部收不到点击。 -->
+<aside class="drawer" id="knowledgeDrawer" hidden aria-label="她知道了什么" data-close>
   <div class="drawer__panel">
     <div class="drawer__head">
       <div>
@@ -218,6 +219,7 @@
   </div>
 </aside>
 
+<div class="toast-wrap">
   <div class="toast" id="toast" role="status" aria-live="polite" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
     <span id="toastText"></span>
