@@ -2,6 +2,7 @@
 
 > 一份看得懂的「系统是怎么长到现在这样」清单。按版本记录**交付了什么、怎么用**；
 > 为什么这么改、实测数据与踩过的坑在 [docs/DEVLOG.md](docs/DEVLOG.md)（同一版本号，可对照读）。
+> 还没做的在 [ROADMAP.md](ROADMAP.md)——每完成一项就从那里删掉、在这里记一笔。
 >
 > 当前状态：可运行的原型（schema v21）。真实记忆、会话与 trace 一律不进仓库。
 
@@ -29,6 +30,40 @@
 | v23 | 11-17 | 四种冲动 | 惦记 / 质问 / 吃醋 / 冷战收尾，各有一套语气 |
 | v24 | 11-17 | 冷战回话 | 生气时你找它，回话也变短变冷 |
 | **v25** | **11-18** | **桌面端正式入库** | 桌面端纳入版本管理，并接上「查看记忆」入口 |
+| **TTS 验证** | **11-18** | **本地神经语音实装** | Qwen3-TTS GGUF 在本机跑通中文合成，逐字节可复现；见下 |
+
+---
+
+## TTS 实装验证 · 本地神经语音跑通（2026-11-18）
+
+**验证了什么**：之前 V5 只是"调研选定方案"，这次真的把模型拉下来、编译、跑出声音。
+
+**结论**：方案可行。Qwen3-TTS-GGUF（`Serveurperso` 移植的 `qwentts.cpp`）在本机 RX 6600 8G + VS2022 上跑通，中文合成出声，音质待主观听感确认，但技术上完全可用。
+
+**怎么用**（产物在 `D:\neuro-memory\_tts_trial\`，未入库）：
+```
+cd D:\neuro-memory\_tts_trial\qwentts.cpp
+build-cpu\qwen-tts.exe \
+  --model models/qwen-talker-1.7b-customvoice-Q8_0.gguf \
+  --codec models/qwen-tokenizer-12hz-Q8_0.gguf \
+  --speaker vivian --lang Chinese --seed 42 \
+  -o out.wav < 文本.txt
+```
+- 模型：1.7B Q8_0 talker（2.0GB）+ tokenizer（278MB），走 hf-mirror 下载
+- 音色：`vivian`（女），另有 serena / uncle_fu / dylan / eric 等；支持三秒克隆与 VoiceDesign
+- 编译：纯 CPU 后端，49 个目标，无需 Vulkan SDK；单句推理约 6 秒（RTF 1.6，比实时慢）
+
+**实测数据**（固定 seed 42）：
+- "今天过得怎么样？我一直在想你。" → 3.84 秒音频，峰值 11119 / RMS 2369，波形正常非静音
+- 同句跑两次 MD5 完全一致（`1110a798...`）——可复现性通过
+- 首帧 344ms，TTFA 满足交互场景
+
+**已知边界**：
+- 当前产物是 CPU 版；Vulkan GPU 版因上游 `vulkan-shaders-gen.cpp` 的 Windows 管道死锁未编完（只差 1 个着色器包装文件），已装好的 Vulkan SDK 和 1580 个 spv 保留在验证目录，回头可续
+- 音质是客观波形验证，未做主观听感评测
+- 未接入桌面端 UI，只是命令行验证；接入需做 V1 的"念出来"按钮 + 独立子进程调 tts-server
+
+**授权**：模型 Apache-2.0，工具 MIT，可随项目分发；无第三方数据外传。
 
 ---
 

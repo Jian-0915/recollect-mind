@@ -57,3 +57,7 @@ desktop/web_bak_v1/
 # 测试临时目录
 .pytest_tmp*/
 .pytest_cache/
+
+# TTS 实装验证目录：含 2.3GB 模型权重与本地编译产物，只在本机保留。
+# 验证结论已写进 CHANGELOG「TTS 实装验证」与 DEVLOG，仓库不需要这些二进制。
+_tts_trial/

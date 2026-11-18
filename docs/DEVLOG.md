@@ -1055,6 +1055,44 @@ temper = (0.25 + 0.75 × 剩余时间比例) − 0.5 × 被哄程度 − 0.08 ×
 
 **没实测就不能写"已定"**：qwentts.cpp 要在 Windows 上编译（C++17/GGML），Vulkan 工具链还没在本机跑过；llama.cpp issue #32050 记录了 AMD Radeon（8060S + RADV）Vulkan cooperative matrices 下重复请求音频不一致，关掉该特性可解，RX 6600 独显是否触发未知。所以 ROADMAP V5 保持未勾选，改成"方案已改、待实装验证"。
 
+## V5 实装验证：Qwen3-TTS 在本机跑出中文（2026-11-18）
+
+从"调研选定方案"到"真的跑出声音"，中间踩了一串 Windows 工具链的坑，记下来免得下次重来。
+
+### 显存误判：WMI 的 AdapterRAM 是 32 位
+
+用户说 GPU 是 8G，我按 `Win32_VideoController.AdapterRAM` 读到 4293918720（4GB）判定用户记错——**错的是我**。那字段是 32 位无符号，4GB 封顶，RX 6600 标准版就是 8GB。`vulkaninfo` 才是可信来源：`AMD Radeon RX 6600 / 8GB / Vulkan 1.4.315 / 驱动 26.10.2`。**以后读显存直接 vulkaninfo，别用 WMI。**
+
+### 模型下载：直连 huggingface.co SSL 失败（EXIT=35）
+
+系统有代理 `http://127.0.0.1:1675`，git/curl 能读到，但 `huggingface.co` 走代理仍 35。换 `hf-mirror.com` 秒下（talker 2.0GB / tokenizer 291MB，HTTP 200，文件头 `GGUF` 校验通过）。**国内下 HF 权重直接用镜像。**
+
+### 编译链：四个坎逐个填
+
+1. **编译器检测失败**（rc.exe / kernel32.lib / ucrtd.lib 找不到）：VS2022 Community 装了但 vcvars64.bat 指向的 SDK 版本和实际的 10.0.26100.0 没对上。在 bat 里手动补全 `LIB` / `INCLUDE` / `PATH`（MSVC lib + SDK um/ucrt），全部用**正斜杠**——CMake 配置文件里反斜杠会被当转义符（`Invalid character escape '\W'`）。
+2. **Vulkan SDK 缺失**：`find_package(Vulkan COMPONENTS glslc)` 要 glslc + SPIRV-Headers，本机只有运行时。装官方 SDK 1.4.363.1（289MB），组件保持默认 Core 即可（glslc/SPIRV-Headers 都在 Core）。装完 CMake 秒过。
+3. **glslc 派生死锁（最坑，没解决）**：`vulkan-shaders-gen.exe` 的 `execute_command()` 用 CreateProcess + 两个管道，**先同步读完 stdout 再读 stderr**——子进程 stderr 写满缓冲区就互等死锁。表现为 ninja 卡在 `Generate vulkan shaders for xxx.comp`，手动跑那条命令 0.2 秒完成。我改源码试了双线程读 + 显式 NUL stdin，编译进 exe 后**仍卡**（可能 ExternalProject 的子构建没吃到我改的源码，或是上游并发 slot 的另一处 bug）。绕行办法：批量模式（`--output-dir` 无 `--source`）0.09 秒生成全部 1580 spv + hpp；把 build.ninja 里 156 条生成命令改成 `cmake -E true` 空操作（产物已齐）；只差 `mul_mm.comp.cpp` 一个文件没生成出来。
+4. **改道 CPU 版**：与其为一个着色器包装文件死磕，不如先验证核心问题。CPU 后端**无着色器步骤**，49 个目标一次编过（`qwen-tts.exe` / `tts-server.exe`）。**结论：能出声才是关键，GPU 加速是后话。**
+
+### 实测结果（这是重点）
+
+```
+build-cpu\qwen-tts.exe --model ...1.7b-customvoice-Q8_0.gguf \
+  --codec ...tokenizer-12hz-Q8_0.gguf --speaker vivian \
+  --lang Chinese --seed 42 -o out.wav < 文本.txt
+```
+- "今天过得怎么样？我一直在想你。" → 3.84s / 92160 samples / 24kHz mono S16 / 181KB
+- 波形：峰值 11119、RMS 2369、非静音采样 66.9%——**真的有声音，不是静音文件**
+- 同句同 seed 跑两次 MD5 完全一致 `1110a798bac545f78a6cfc59ee29376f`——可复现
+- 性能：TTFA 344ms，总推理 6.3s，RTF 1.645（CPU 比实时慢，可接受）
+- 三句不同文本都正常出 wav
+
+### 收尾状态
+
+- 产物全在 `D:\neuro-memory\_tts_trial\`（未入库）：`qwentts.cpp/`（源码 + 三个 build 目录）、`models/`（2.3GB 权重）、测试 wav、各种构建脚本
+- Vulkan 版已装 SDK + 1580 spv，只差 1 个 .comp.cpp；要续就从这里接，先解决上游死锁
+- 下一步才是接桌面端：V1「念出来」按钮 → 独立子进程跑 `tts-server`（OpenAI 兼容 HTTP，自带音色注册）→ 前端 Audio 播放
+
 ## 服务管理
 
 ```bash

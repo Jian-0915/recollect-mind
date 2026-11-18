@@ -193,16 +193,6 @@
   - 验收：差异能被感觉到但不夸张；不改变文字内容；可关。
   - 依赖：V3，且主动关心的情绪状态已在前端可见（见 E 组）。
 
-- [ ] **V5 · 本地神经语音升级（2026-11-18 二次调研，方案已改）**：从系统 SAPI 升级到本地神经 TTS。
-  - **新方案：Qwen3-TTS GGUF + Vulkan**（AMD 可跑）。官方 `qwen-tts` 包是 **CUDA-only**，无 ROCm / CPU / Mac 路径，本机 RX 6600 装不了；但社区移植 **`Serveurperso/Qwen3-TTS-GGUF` + `qwentts.cpp`**（工具 MIT，模型 Apache-2.0）明确支持 `GGML_BACKEND=Vulkan0`，AMD 独显走 Vulkan 加速。
-  - **显存账**：官方"0.6B 最低 4G"是 CUDA + bf16 的估算，不适用 GGUF。实测文件体积：1.7B Q8_0 talker 2.1GB + tokenizer 291MB ≈ **2.4GB**；1.7B Q4_K_M 1.2+0.255 ≈ 1.5GB；0.6B Q8_0 993+291MB ≈ 1.3GB。**本机 8G 直接上 1.7B Q8_0，不必降级 0.6B**（0.6B 无 VoiceDesign，克隆保真度也差一档）。
-  - **中文音色**：CustomVoice 内置 Vivian / Serena（女）、Uncle_Fu / Dylan / Eric（男）；另有 Base 三秒克隆、VoiceDesign（仅 1.7B，需一句描述造声音）。中文 WER 0.77、说话人相似度 0.95（官方自报）。
-  - **授权**：上游模型与 codec 都是 Apache-2.0，GGUF 工具 MIT——比 Piper（引擎 GPL-3.0、huayan 数据集授权 Unknown）干净，可随项目分发权重。
-  - **风险**：① `qwentts.cpp` 是社区 C++ 项目、要编译，Windows + Vulkan 工具链需实装验证；② llama.cpp issue #32050：AMD Radeon（核显 8060S + RADV）Vulkan 开 cooperative matrices 时重复请求音频不一致，关掉 `KHR cooperative matrices` 可解，RX 6600 独显是否触发未知；③ 上游仓库 2026-03 后无更新，工具链年轻。
-  - **集成形态**：独立子进程跑 qwentts.cpp 出 wav，桌面端经本地 HTTP 取音频播放；**不进主 Python 进程**，避免 C++ 崩溃拖垮窗口。
-  - 验收：本机 Vulkan 后端出声、同一句重复请求音频一致、不联网、不把对话发给第三方；失败自动退回 V1 系统 TTS（Piper 作为 CPU 中间档可选）。
-  - 依赖：V3 已被实际使用。
-
 ---
 
 ## 完成记录
@@ -211,4 +201,4 @@
 
 | 日期 | 编号 | 说明 |
 |---|---|---|
-| — | — | （还没有完成的条目） |
+| 11-18 | V5 | 本地神经 TTS 实装验证通过（Qwen3-TTS GGUF / CPU），见 CHANGELOG「TTS 实装验证」 |
