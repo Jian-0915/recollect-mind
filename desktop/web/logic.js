@@ -102,6 +102,9 @@
   }
   // 缓存音频地址：<audio> 直接 src 过来播，命中即秒开。
   const ttsAudioUrl = (key) => '/api/tts/audio/' + encodeURIComponent(key);
+  // 语音播放偏好（音色/语速/音量）：存后端 settings，重启/换端口不丢。
+  const ttsPrefs     = () => get('/api/tts/prefs');
+  const ttsPrefsSave = (prefs) => put('/api/tts/prefs', prefs || {});
 
   /* ==================== 外部知识（独立库 + AnySearch MCP） ==================== */
   // 带出处答问：识别实体 → 查独立知识库 → 必要时联网 → 带来源回答。
@@ -153,6 +156,7 @@
     persona, personaTpl, personaPreview, personaSave, personaHistory, personaRollback,
     identity, identityHist, identitySave,
     ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
+    ttsPrefs, ttsPrefsSave,
     settings, settingsSave, models,
     research, knowledge, knowledgeFind,
     autoStatus, autoLog, autoToggle,

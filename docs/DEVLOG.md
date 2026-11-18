@@ -9,6 +9,24 @@ v12 的机制说明保留在 README.zh.md 的「记忆机制」「L0 固定身�
 
 ---
 
+## v38：语音设置重启丢失（2026-11-18）
+
+**动机**：用户实测"语音设置没有持久化，每次重新启动都要重新设置"。
+
+**根因**：音色/语速/音量只存 `localStorage['ache.tts']`。桌面端 `main()` 里 `port = _find_free_port()` 每次从 8765 起找空闲端口——只要 8765 被占（残留服务、别的程序），端口就顺延成 8766/8767。localStorage 按 origin 隔离，origin 含端口，于是每次启动几乎是全新的存储分区，旧偏好"消失"。主题/布局/名字也用 localStorage，同理会丢，只是语音最常被调整所以先被发现。
+
+**为什么不用"固定端口"修**：固定端口会在端口冲突时启动失败，治标不治本；WebView2 用户目录若不落盘，localStorage 一样丢。正解是**把偏好移出浏览器**，存后端 settings 表。
+
+**修法**：
+- `settings.py` 新增 `tts_prefs_load/save`，key=`tts_prefs` 存 settings 表；`_tts_normalize` 做白名单+范围夹取（音色限 5 个内置值，rate 0.7–1.4，volume 0–1），脏数据不进位。TTS 偏好直读库、不走 models 那套缓存，所以每次都是最新值。
+- `api.py` 加 `GET/PUT /api/tts/prefs`（放主 app，不放 desktop/app.py：偏好存取是通用 settings 能力，也便于测试）。
+- 前端：`getTtsPrefs()` 保持同步读缓存供多处调用；新增 `syncTtsPrefsFromServer()` 启动时以后端覆盖缓存并回填 UI；`setTtsPrefs()` 写缓存后 fire-and-forget PUT 后端。`initTtsSettings` 改为**先等后端回填、再绑定事件**，避免异步回填覆盖用户刚改的值——这里一度踩过作用域坑（把 save/doTry 塞进局部函数导致访问不到），重写成同作用域内的具名函数解决。
+- localStorage 降级为缓存；音色变更计数器仍用 localStorage（跨页瞬时通知重新预热，不参与持久化）。
+
+**验证**：临时库保存→`settings.reload()`→读出一致；路由 GET/PUT 往返；`test_settings_tts.py` 7 项含前端契约断言；完整套件 578 项全过；主库 `tts_prefs` 键为空确认测试没污染。
+
+---
+
 ## v37：知识抽屉「关不掉」与后台看不到知识（2026-11-18）
 
 **动机**：用户实测反馈两件事——①「她知道了什么」面板点开后关闭按钮没反应、回不了对话；②她联网查到的东西在后台管理里找不到。

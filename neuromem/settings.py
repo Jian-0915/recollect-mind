@@ -313,6 +313,65 @@ def mcp_active(items=None):
     return lst[0] if lst else None
 
 
+# --------------------------------------------------------------------------
+# 语音播放偏好（音色/语速/音量）
+# --------------------------------------------------------------------------
+# 设备级偏好，不进人设版本系统。必须存后端 settings 表而不是浏览器
+# localStorage：桌面端每次启动端口顺延（_find_free_port），localStorage 按
+# origin（含端口）隔离，端口一变偏好就"丢失"——用户实测每次重启都要重设。
+_TTS_KEY = "tts_prefs"
+_TTS_DEFAULT = {"voice": "vivian", "rate": 1.0, "volume": 1.0}
+_TTS_VOICES = {"vivian", "serena", "uncle_fu", "dylan", "eric"}
+
+
+def _tts_normalize(raw):
+    """规范化并夹取范围，非法值回落默认，防止脏数据让播放出错。"""
+    out = dict(_TTS_DEFAULT)
+    if not isinstance(raw, dict):
+        return out
+    voice = raw.get("voice")
+    if isinstance(voice, str) and voice in _TTS_VOICES:
+        out["voice"] = voice
+    for key, lo, hi in (("rate", 0.7, 1.4), ("volume", 0.0, 1.0)):
+        val = raw.get(key)
+        if isinstance(val, (int, float)) and not isinstance(val, bool):
+            out[key] = min(hi, max(lo, float(val)))
+    return out
+
+
+def tts_prefs_load(conn=None):
+    """读语音偏好；无配置返回默认值。"""
+    own = conn is None
+    c = conn or db.connect()
+    try:
+        _ensure_table(c)
+        row = c.execute("SELECT value FROM settings WHERE key=?", (_TTS_KEY,)).fetchone()
+        raw = json.loads(row["value"]) if row else None
+        c.commit()
+    finally:
+        if own:
+            c.close()
+    return _tts_normalize(raw)
+
+
+def tts_prefs_save(prefs, conn=None):
+    """保存语音偏好（规范化后落库），广播版本失效。"""
+    norm = _tts_normalize(prefs)
+    own = conn is None
+    c = conn or db.connect()
+    try:
+        _ensure_table(c)
+        c.execute("INSERT OR REPLACE INTO settings(key,value) VALUES(?,?)",
+                  (_TTS_KEY, json.dumps(norm, ensure_ascii=False)))
+        c.commit()
+    finally:
+        if own:
+            c.close()
+    if own:
+        _touch_version()
+    return norm
+
+
 def ollama_base(url):
     """取 Ollama 原生端点；云端预设残留的 .../v1 必须忽略。
 

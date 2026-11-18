@@ -944,6 +944,26 @@ def set_mcp_active(p: Dict[str, Any]):
     return {"ok": True, "servers": settings.mcp_public(saved), "active_id": sid}
 
 
+@app.get("/api/tts/prefs")
+def get_tts_prefs():
+    """读语音播放偏好（音色/语速/音量）。存后端而非 localStorage：
+    桌面端每次启动端口顺延，localStorage 按 origin 隔离会导致偏好丢失。"""
+    try:
+        return {"ok": True, "prefs": settings.tts_prefs_load()}
+    except Exception as e:
+        return {"ok": False, "error": str(e), "prefs": dict(settings._TTS_DEFAULT)}
+
+
+@app.put("/api/tts/prefs")
+def put_tts_prefs(p: Dict[str, Any]):
+    """保存语音播放偏好，落 settings 表，重启/换端口后仍在。"""
+    try:
+        saved = settings.tts_prefs_save(p or {})
+        return {"ok": True, "prefs": saved}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
 @app.post("/api/settings/test")
 def test_settings(p: Optional[Dict[str, Any]] = None):
     p = p or {}

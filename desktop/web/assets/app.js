@@ -473,12 +473,19 @@ function ttsWarm(text, voice) {
   DeskAPI.ttsPrepare(text, voice).catch(function () {});
 }
 
-/* 语音偏好（音色/语速/音量）独立存 localStorage，不进人设版本系统——
-   这是设备播放偏好，不是人格，改它不该产生人设新版本。两页共用同一份。 */
+/* 语音偏好（音色/语速/音量）：以前只存 localStorage，但桌面端每次启动端口
+   顺延（_find_free_port），localStorage 按 origin（含端口）隔离——端口一变
+   就读不到旧值，用户实测"每次重启都要重新设置"。改为以后端 settings 表
+   为准（跟着主库、不依赖端口），localStorage 仅作同步读取的本地缓存。
+
+   getTtsPrefs() 保持同步（被多处同步调用）：读 localStorage 缓存。
+   syncTtsPrefsFromServer() 在页面启动时异步拉取后端值覆盖缓存。
+   setTtsPrefs() 写缓存后立即异步 PUT 后端，保证下次启动读得到。 */
 var TTS_PREFS_KEY = "ache.tts";
 var TTS_VOICE_CHANGE_KEY = "ache.tts.voiceChange";  // 音色变更计数器，跨页通知重新预热
+var TTS_PREFS_DEFAULT = { voice: "vivian", rate: 1.0, volume: 1.0 };
 function getTtsPrefs() {
-  var d = { voice: "vivian", rate: 1.0, volume: 1.0 };
+  var d = { voice: TTS_PREFS_DEFAULT.voice, rate: TTS_PREFS_DEFAULT.rate, volume: TTS_PREFS_DEFAULT.volume };
   try {
     var saved = JSON.parse(localStorage.getItem(TTS_PREFS_KEY) || "{}");
     if (saved && typeof saved === "object") {
@@ -489,9 +496,13 @@ function getTtsPrefs() {
   } catch (e) {}
   return d;
 }
+// 只写本地缓存，不触发音色变更计数（用于启动时回填，不算用户改动）。
+function _cacheTtsPrefs(p) {
+  try { localStorage.setItem(TTS_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
+}
 function setTtsPrefs(p) {
   var old = getTtsPrefs();
-  try { localStorage.setItem(TTS_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
+  _cacheTtsPrefs(p);
   // 音色真变了才计数，触发对话页按新音色重新预热所有气泡
   if (p && p.voice && p.voice !== old.voice) {
     try {
@@ -499,7 +510,40 @@ function setTtsPrefs(p) {
       localStorage.setItem(TTS_VOICE_CHANGE_KEY, String(n + 1));
     } catch (e) {}
   }
+  // 落到后端持久化（fire-and-forget，失败不阻断 UI）。
+  if (window.DeskAPI && DeskAPI.ttsPrefsSave) {
+    DeskAPI.ttsPrefsSave({ voice: p.voice, rate: p.rate, volume: p.volume }).catch(function () {});
+  }
 }
+// 页面启动时调用：以后端为准覆盖本地缓存。返回 Promise<boolean> 是否成功同步。
+function syncTtsPrefsFromServer() {
+  if (!window.DeskAPI || !DeskAPI.ttsPrefs) return Promise.resolve(false);
+  return DeskAPI.ttsPrefs().then(function (r) {
+    if (!r || !r.ok || !r.prefs) return false;
+    var p = r.prefs;
+    var valid = { voice: p.voice || TTS_PREFS_DEFAULT.voice,
+                  rate: typeof p.rate === "number" ? p.rate : TTS_PREFS_DEFAULT.rate,
+                  volume: typeof p.volume === "number" ? p.volume : TTS_PREFS_DEFAULT.volume };
+    _cacheTtsPrefs(valid);
+    // 后端与缓存不一致（典型：换了端口后缓存是空的）→ 刷新 UI 与播放器。
+    applyTtsPrefsToUI(valid);
+    return true;
+  }).catch(function () { return false; });
+}
+// 把偏好写回当前页的所有相关控件/播放器；每页按 DOM 存在性各自生效。
+function applyTtsPrefsToUI(p) {
+  ttsPlayer.rate = p.rate;
+  ttsPlayer.volume = p.volume;
+  var voice = $("#tts-voice"), rate = $("#tts-rate"), volume = $("#tts-volume");
+  if (voice) voice.value = p.voice;
+  if (rate) rate.value = p.rate;
+  if (volume) volume.value = p.volume;
+  var rateOut = $("#ttsRateOut"), volumeOut = $("#ttsVolumeOut");
+  if (rateOut) rateOut.textContent = (p.rate < 0.85 ? "偏慢" : p.rate < 0.97 ? "稍慢" : p.rate <= 1.03 ? "正常" : p.rate <= 1.2 ? "稍快" : "偏快");
+  if (volumeOut) volumeOut.textContent = Math.round(p.volume * 100) + "%";
+}
+// 启动即从后端同步（对话页/设置页都执行；timer 让首屏渲染先完成）。
+window.setTimeout(function () { syncTtsPrefsFromServer(); }, 0);
 
 // 按当前音色重新预热对话页所有已有气泡（音色变更后调用）。
 function rewarmAllBubbles() {
@@ -1243,11 +1287,6 @@ function fireReplyNotice(text, voice) {
       var tryHint = $("#ttsTryHint");
       if (!voice || !rate || !volume) return;
 
-      var prefs = getTtsPrefs();
-      voice.value = prefs.voice;
-      rate.value = prefs.rate;
-      volume.value = prefs.volume;
-
       function rateLabel(v) {
         if (v < 0.85) return "偏慢";
         if (v < 0.97) return "稍慢";
@@ -1268,13 +1307,8 @@ function fireReplyNotice(text, voice) {
         ttsPlayer.rate = parseFloat(rate.value);
         ttsPlayer.volume = parseFloat(volume.value);
       }
-      [voice, rate, volume].forEach(function (el) {
-        el.addEventListener("change", function () { syncOut(); save(); });
-        el.addEventListener("input", syncOut);
-      });
-      syncOut();
-
-      if (tryBtn) {
+      function bindTry() {
+        if (!tryBtn) return;
         tryBtn.addEventListener("click", function () {
           if (ttsPlayer.state !== "idle") { ttsPlayer.stop(); return; }
           if (!window.DeskAPI || !DeskAPI.ttsStatus) return;
@@ -1303,6 +1337,23 @@ function fireReplyNotice(text, voice) {
           if (state === "idle" && tryBtn) tryBtn.textContent = "试听一句";
           if (state === "playing" && tryHint) tryHint.textContent = "正在播放，再点按钮可以停。";
         });
+      }
+      function bindControls() {
+        [voice, rate, volume].forEach(function (el) {
+          el.addEventListener("change", function () { syncOut(); save(); });
+          el.addEventListener("input", syncOut);
+        });
+      }
+
+      // 后端优先：先取后端值回填控件，再绑定事件（避免异步回填覆盖用户改动）。
+      // syncTtsPrefsFromServer 内部已调用 applyTtsPrefsToUI 回填所有控件+输出。
+      var afterLoad = function () { syncOut(); bindControls(); bindTry(); };
+      if (window.DeskAPI && DeskAPI.ttsPrefs) {
+        syncTtsPrefsFromServer().then(afterLoad, afterLoad);
+      } else {
+        // 无后端接口（如纯静态预览）：用本地缓存回填后立即绑定。
+        applyTtsPrefsToUI(getTtsPrefs());
+        afterLoad();
       }
     }
 
