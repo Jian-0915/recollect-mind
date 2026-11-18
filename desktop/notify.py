@@ -17,7 +17,7 @@ from __future__ import annotations
 import sys
 import threading
 
-_TITLE = "阿澈"
+_TITLE = "念兹"
 
 # win11toast 一旦报错就永久走降级：反复在 UI 线程触发重 import 会拖垮窗口。
 _broken = False

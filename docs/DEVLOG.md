@@ -1245,6 +1245,33 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
 
+## v33：品牌「念兹」与脱离控制台（2026-11-18）
+
+### 品牌怎么定的
+
+用户先说"标题栏和实际不符合，或取个别的名字"，选了"固定产品名"；追问后要"短、一眼知道是什么、诗意一点"。给了四组候选，最终定 **念兹**。
+
+关键分层：**品牌名 ≠ 角色名**。品牌"念兹"回答"这是什么项目"（记忆 / 惦记 / 念出来，一个"念"字全盖住）；角色名（微微 / 傻包）回答"住在里面的她是谁"，由主库人设卡决定、用户随时改。之前二者混用才导致"标题阿澈、界面微微"的割裂。标题栏只放品牌两个字，副标不进标题栏——要短。
+
+命名候选与取舍（供日后回顾）：念念（三关都盖但偏口语）、记得（最直白但工具感）、回响（文艺但第一眼抽象）、忆伴（直给但生造）；诗意组：念兹（选中）、如故、栖念、余音。
+
+### 控制台为什么关不掉
+
+`start_desktop.bat` 原来用 `python.exe` **前台**跑 `desktop/app.py`，控制台是这个进程的宿主——关控制台等于杀掉整个进程（uvicorn、webview、tts 子进程一起没）。这不是 webview 的问题，是启动方式的问题。
+
+### 修法
+
+- `start_desktop.bat`：解析出与 `python.exe` 同目录的 `pythonw.exe`，用 `start "" "%PYW%" app.py` 分离启动。pythonw 是 GUI 子系统、不挂控制台，bat 随即退出，桌面端独立存活。
+- **日志兜底是必须项**：pythonw 下 `sys.stdout` / `sys.stderr` 是 `None`，v32 里 `notify.py` 的 `print(..., file=sys.stderr)` 和 uvicorn 内部日志都会抛 `AttributeError`。在 `desktop/app.py` 顶部（早于 main 里 import uvicorn/webview）把二者兜底到 `data/desktop.log`，路径可用 `NEUROMEM_DESKTOP_LOG` 覆盖便于测试隔离。
+- 调试版 `start_desktop_debug.bat` 用 `python.exe` 前台跑，保留实时输出——去掉控制台后必须留一条排错通道，否则出问题只能翻日志。
+
+### 验证与坑
+
+- 本机 `pythonw.exe` 存在且与 python 同目录，`pythonw -c "import webview, uvicorn"` 通过。
+- bat 内容全 ASCII + CRLF（沿用既定约定，避免 CMD 中文乱码）。注意 bat 里取 pythonw 路径要用 `for /f` + `%PY% -c "import sys,os;..."` 动态算，别写死盘符路径。
+- 单测用子进程把 `sys.stdout/stderr` 设为 None 再 import，验证日志落盘且不抛；品牌三常量（BRAND / PRODUCT_TITLE / TITLE）加断言锁死。相关 14 项通过。
+- pytest 跑完清理临时目录时触发环境的安全策略拦截（退出码非 0），但测试本身 14 项全绿，与代码无关。
+
 ## v32：桌面端启动「未响应」热修（2026-11-18）
 
 ### 现象与定位

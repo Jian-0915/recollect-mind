@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Ache Desktop
+title Nianzi Desktop
 set "PY=python"
 where python >nul 2>nul
 if errorlevel 1 (
@@ -14,8 +14,12 @@ if errorlevel 1 (
   %PY% -m pip install pywebview uvicorn
   if errorlevel 1 goto :failed
 )
-%PY% "%~dp0desktop\app.py"
-if errorlevel 1 goto :failed
+for /f "delims=" %%i in ('%PY% -c "import sys,os;print(os.path.join(os.path.dirname(sys.executable),'pythonw.exe'))"') do set "PYW=%%i"
+if not exist "%PYW%" (
+  echo Cannot find pythonw.exe at: %PYW%
+  goto :failed
+)
+start "" "%PYW%" "%~dp0desktop\app.py"
 exit /b 0
 
 :failed

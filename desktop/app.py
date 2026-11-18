@@ -1,4 +1,7 @@
-"""阿澈桌面端 —— 陪伴对话的单窗口桌面壳。
+"""念兹桌面端 —— 陪伴对话的单窗口桌面壳。
+
+品牌名「念兹」：念兹在兹，念念不忘于此。一个"念"字盖住记忆、惦记、念出来。
+界面里的角色名（微微 / 傻包 …）由人设卡决定，与品牌名是两层，互不影响。
 
 设计（M1）：
 - 与内核同进程：用线程在原进程内起 FastAPI(neuromem.api.app)，避免历史上
@@ -16,9 +19,10 @@
 - 回复通知：文字气泡与语音缓存都就绪后，前端调 notify_reply() 发系统
   通知（像微信来消息），点击回聊天页；语音不可用时降级为文字即通知。
 
-启动：
-    python desktop/app.py
-或双击 start_desktop.bat
+启动（Windows）：
+    双击 start_desktop.bat        —— 无控制台，日志写入 data/desktop.log
+    双击 start_desktop_debug.bat  —— 保留控制台，排错时用
+也可：python desktop/app.py
 """
 from __future__ import annotations
 
@@ -34,11 +38,31 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+# pythonw.exe（无控制台）下 sys.stdout / sys.stderr 是 None，任何
+# print(file=sys.stderr) 都会抛 AttributeError，uvicorn 内部也要往 stderr 写。
+# 这里统一兜底到日志文件（默认 data/desktop.log，可用 NEUROMEM_DESKTOP_LOG 改），
+# 保留出错可查的能力。
+# 必须在 import uvicorn / webview 之前完成（它们在 main() 里才 import）。
+if sys.stdout is None or sys.stderr is None:
+    try:
+        _log_env = os.environ.get("NEUROMEM_DESKTOP_LOG")
+        _log_path = Path(_log_env) if _log_env else ROOT / "data" / "desktop.log"
+        _log_path.parent.mkdir(parents=True, exist_ok=True)
+        _log_fp = open(_log_path, "a", encoding="utf-8", buffering=1)
+        if sys.stdout is None:
+            sys.stdout = _log_fp
+        if sys.stderr is None:
+            sys.stderr = _log_fp
+    except Exception:
+        pass                      # 日志兜底失败也不能挡住窗口启动
+
 FRONTEND = Path(__file__).resolve().parent / "web" / "index.html"
 HOST = "127.0.0.1"
 PORT = int(os.environ.get("NEUROMEM_DESKTOP_PORT", "8765"))
 OPEN_WEB_CMD = f"http://{HOST}:{PORT}/"          # 网页后台地址（web 首页）
-TITLE = "阿澈"
+BRAND = "念兹"                  # 品牌名：念兹在兹，念念不忘于此
+PRODUCT_TITLE = BRAND           # 窗口标题栏：固定品牌名，不跟人设改名而变
+TITLE = BRAND                   # 通知来源兜底：前端没给角色名时才用
 
 
 def _find_free_port(preferred=PORT):
@@ -146,7 +170,7 @@ def _build_server(port):
         from desktop import tts
         return {
             "ok": True,
-            "name": TITLE,
+            "name": PRODUCT_TITLE,
             "web_url": f"http://{HOST}:{port}/desk-web-login?t={_WEB_LOGIN_TOKEN['value']}",
             "tts": tts.status(),
         }
@@ -444,7 +468,7 @@ def main():
         except Exception:
             time.sleep(0.25)
     if not ready:
-        print(f"[阿澈] 服务未能就绪（端口 {port}），请查看控制台错误。", file=sys.stderr)
+        print(f"[{BRAND}] 服务未能就绪（端口 {port}），请查看日志文件 data/desktop.log。", file=sys.stderr)
 
     # 语音服务后台拉起：模型加载要 2~4 秒，不能挡住窗口出现。
     # 若模型未安装，tts.start() 会秒退，前端 status 显示不可用即可，不影响对话。
@@ -459,7 +483,7 @@ def main():
 
     api = _Api(port)
     window = webview.create_window(
-        TITLE,
+        PRODUCT_TITLE,
         f"http://{HOST}:{port}/desk/",
         js_api=api,
         width=420, height=760,
