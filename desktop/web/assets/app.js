@@ -114,6 +114,92 @@
     });
   });
 
+  /* ---------------- 外部知识抽屉（她自己查来的） ---------------- */
+
+  function knowledgeRow(item) {
+    var row = document.createElement("div");
+    row.className = "knowledge-item";
+    var title = document.createElement("a");
+    title.className = "knowledge-item__title";
+    title.textContent = item.title || "未命名";
+    title.href = item.url || "#";
+    title.addEventListener("click", function (event) {
+      event.preventDefault();
+      if (window.DeskAPI && item.url) {
+        // 桌面端用系统默认浏览器打开来源，不劫持 WebView
+        try { window.open(item.url, "_blank"); } catch (e) {}
+      }
+    });
+    row.appendChild(title);
+    if (item.snippet) {
+      var snip = document.createElement("p");
+      snip.className = "knowledge-item__snippet";
+      snip.textContent = item.snippet;
+      row.appendChild(snip);
+    }
+    var meta = document.createElement("p");
+    meta.className = "knowledge-item__meta";
+    var when = (item.fetched_at || "").replace("T", " ").slice(0, 16);
+    meta.textContent = (item.provider || "anysearch") + " · 抓取 " + (when || "未知时间");
+    row.appendChild(meta);
+    return row;
+  }
+
+  function renderKnowledge(items, statusText) {
+    var list = $("#knowledgeList");
+    var status = $("#knowledgeStatus");
+    if (!list) return;
+    list.innerHTML = "";
+    if (status) {
+      status.hidden = !statusText;
+      if (statusText) status.textContent = statusText;
+    }
+    if (!items || !items.length) {
+      var empty = document.createElement("p");
+      empty.className = "knowledge-empty";
+      empty.textContent = "这里还空着。跟她聊到不懂的东西，她自己去查了才会存进来。";
+      list.appendChild(empty);
+      return;
+    }
+    items.forEach(function (item) { list.appendChild(knowledgeRow(item)); });
+  }
+
+  async function loadKnowledge(query) {
+    if (!window.DeskAPI) return;
+    try {
+      var data = query
+        ? await DeskAPI.knowledgeFind(query)
+        : await DeskAPI.knowledge(60);
+      renderKnowledge(data && data.items, query
+        ? "搜到 " + ((data && data.items) || []).length + " 条"
+        : "已收录 " + ((data && data.count) || 0) + " 条");
+    } catch (e) {
+      renderKnowledge([], "读取失败：" + ((e && e.error) || e));
+    }
+  }
+
+  function openKnowledgeDrawer() {
+    var drawer = $("#knowledgeDrawer");
+    if (!drawer) return;
+    openLayer(drawer, $("#knowledgeQuery"));
+    loadKnowledge("");
+  }
+
+  function initKnowledge() {
+    var drawer = $("#knowledgeDrawer");
+    if (!drawer) return;
+    var form = $("#knowledgeSearchForm");
+    if (form) {
+      form.addEventListener("submit", function (event) {
+        event.preventDefault();
+        var q = ($("#knowledgeQuery") || {}).value || "";
+        loadKnowledge(q.trim());
+      });
+    }
+  }
+
+  initKnowledge();
+
   /* ---------------- 顶栏菜单 ---------------- */
 
   function initMenu() {
@@ -191,6 +277,14 @@
     if (memoryItem) {
       memoryItem.addEventListener("click", function () {
         if (window.DeskAPI) DeskAPI.openWeb("events");
+      });
+    }
+
+    // 她知道了什么：外部知识抽屉（独立库，与上面的陪伴记忆分开）
+    var knowledgeItem = $("#knowledgeItem");
+    if (knowledgeItem) {
+      knowledgeItem.addEventListener("click", function () {
+        openKnowledgeDrawer();
       });
     }
   }
@@ -501,6 +595,19 @@ function fireReplyNotice(text, voice) {
       ttsWarm(text, warmVoice);
       body.appendChild(speakBtn);
 
+      // 查证按钮：点它才让「她自己上网查」。不挂在每轮自动触发，避免把
+      // 私人闲聊当搜索词、也避免程序式打扰。查到的东西进独立知识库。
+      var researchBtn = document.createElement("button");
+      researchBtn.className = "speak-btn research-btn";
+      researchBtn.type = "button";
+      researchBtn.setAttribute("aria-label", "查一下这个");
+      researchBtn.title = "查一下这个";
+      researchBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-3.5-3.5"></path></svg>';
+      researchBtn.addEventListener("click", function () {
+        runResearch(text, body, researchBtn);
+      });
+      body.appendChild(researchBtn);
+
       if (memoryText) {
         var mem = document.createElement("p");
         mem.className = "memory";
@@ -516,6 +623,57 @@ function fireReplyNotice(text, voice) {
 
     function insert(node) {
       stream.insertBefore(node, thinking);
+    }
+
+    /* 点「查一下」：让外部知识链接管这一句，结果作为带来源的新气泡插入。
+     * 按钮自身进入 loading 态；失败用 toast 说明，绝不静默编答案。 */
+    function runResearch(text, body, btn) {
+      if (!window.DeskAPI || btn.disabled) return;
+      btn.disabled = true;
+      btn.classList.add("is-preparing");
+      btn.title = "正在查…";
+      if (thinking) thinking.hidden = false;
+      setStatus(true);
+
+      DeskAPI.research(text, false).then(function (r) {
+        if (thinking) thinking.hidden = true;
+        setStatus(false);
+        btn.disabled = false;
+        btn.classList.remove("is-preparing");
+        btn.title = "查一下这个";
+        if (!r || !r.ok || (!r.answer && !(r.sources || []).length)) {
+          toast((r && r.note) || "这次没查到，她也不好瞎说");
+          return;
+        }
+        var card = himMessage(r.answer || "我查到这些，你看看：", "");
+        var sources = (r.sources || []).slice(0, 5);
+        if (sources.length) {
+          var box = document.createElement("div");
+          box.className = "msg__sources";
+          sources.forEach(function (s, n) {
+            var a = document.createElement("a");
+            a.className = "msg__source";
+            a.textContent = "[" + (n + 1) + "] " + (s.title || "来源");
+            a.href = s.url || "#";
+            a.title = s.url || "";
+            a.addEventListener("click", function (event) {
+              event.preventDefault();
+              if (s.url) { try { window.open(s.url, "_blank"); } catch (e) {} }
+            });
+            box.appendChild(a);
+          });
+          card.querySelector(".msg__body").appendChild(box);
+        }
+        insert(card);
+        toEnd();
+      }).catch(function (e) {
+        if (thinking) thinking.hidden = true;
+        setStatus(false);
+        btn.disabled = false;
+        btn.classList.remove("is-preparing");
+        btn.title = "查一下这个";
+        toast("查的时候出错了：" + ((e && e.error) || "稍后再试"));
+      });
     }
 
     function shorten(text) {

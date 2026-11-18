@@ -1505,3 +1505,137 @@
     font-size: 36px;
   }
 }
+/* ==========================================================================
+   外部知识抽屉 —— 她自己查来的资料（与陪伴记忆物理隔离）
+   ========================================================================== */
+.knowledge-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.knowledge-search {
+  display: flex;
+  gap: 8px;
+}
+
+.knowledge-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-10);
+  background: var(--field-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--fs-12);
+}
+
+.knowledge-search button {
+  padding: 9px 16px;
+  border: 1px solid var(--clay-500);
+  border-radius: var(--r-10);
+  background: var(--clay-600);
+  color: var(--ink-inverse);
+  font: inherit;
+  font-size: var(--fs-12);
+  cursor: pointer;
+}
+
+.knowledge-search button:hover { background: var(--clay-700); }
+
+.knowledge-status {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-11);
+}
+
+.knowledge-status[hidden] { display: none; }
+
+.knowledge-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.knowledge-item {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-12);
+  background: var(--surface-2);
+}
+
+.knowledge-item__title {
+  display: block;
+  margin: 0 0 4px;
+  color: var(--clay-700);
+  font-size: var(--fs-12);
+  font-weight: 500;
+  text-decoration: none;
+  line-height: 1.4;
+}
+
+.knowledge-item__title:hover { text-decoration: underline; }
+
+.knowledge-item__snippet {
+  margin: 0 0 6px;
+  color: var(--ink-2);
+  font-size: var(--fs-11);
+  line-height: 1.6;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.knowledge-item__meta {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--fs-10);
+}
+
+.knowledge-empty {
+  padding: 28px 12px;
+  text-align: center;
+  color: var(--ink-3);
+  font-size: var(--fs-11);
+  line-height: 1.7;
+}
+
+.knowledge-hint {
+  margin: 8px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--fs-10);
+  line-height: 1.6;
+}
+
+/* 回答里的来源角标：可点开网页 */
+.msg__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.msg__source {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--clay-700);
+  font-size: var(--fs-10);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.msg__source:hover { border-color: var(--clay-400); }
+
+/* 查证按钮：与「念出来」并列，用陶土色区分「这会联网」 */
+.research-btn { color: var(--clay-700); }
+.research-btn:hover { color: var(--clay-800); border-color: var(--clay-400); }
+.research-btn:disabled { opacity: .55; cursor: default; }

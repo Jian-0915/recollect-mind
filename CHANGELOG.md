@@ -38,6 +38,38 @@
 | **v31** | **11-18** | **回复就绪系统通知** | 文字+语音都备好才发可点击系统通知（像微信来消息），点了回聊天页；见下 |
 | **v32** | **11-18** | **未响应热修** | js_api 不再持有 Window、通知 import 移进守护线程，根治启动后「未响应」；见下 |
 | **v33** | **11-18** | **品牌「念兹」+ 脱离控制台** | 窗口标题用品牌名；pythonw 无控制台启动，日志落盘，另留调试版；见下 |
+| **v34** | **11-18** | **自己查资料：外部知识 + AnySearch MCP** | 遇到地名/梗自己联网查、带来源回答，存独立库不污染记忆；桌面端可查证+知识面板；见下 |
+
+---
+
+## v34 · 自己查资料（外部知识闭环 + AnySearch MCP，2026-11-18）
+
+用户要的是让念兹「自己去外面获取信息」：和她聊了乌江寨，她能自己查相关知识，下次聊更聪明；知识按关键字可检索；并给出专门的网页查询 MCP（`https://api.anysearch.com/mcp`）要求接进来。这补齐了长期缺的「发现缺口 → 获取 → 内化 → 反哺」前半条链。
+
+**怎么用**
+- 对话页每条她的回复下有一个 🔍「查一下」按钮：点了才用那句话联网查（不在每句闲聊上自动查，避免打扰和把私聊外发）。查到的回答作为新气泡插入，末尾带 `[1][2]` 来源角标，点角标用系统浏览器打开原网页。
+- 顶栏菜单 →「她知道了什么」：抽屉里按关键词搜她查过的东西，每条都带来源网址和抓取时间。这是独立知识库，和她记得你说的话（「查看记忆」）是两套。
+- 网页后台新增 `POST /api/research`、`GET /api/knowledge`、`GET /api/knowledge/search`；桌面端同进程注册同名路由。
+
+**关键设计**
+- **物理隔离**：外部知识写独立 SQLite（默认 `data/knowledge.db`，`NEUROMEM_KNOWLEDGE_DB` 可覆盖），一行都不碰主库的 `events` / `concepts`。实测主库 events 计数 40→40 不变。
+- **可插拔工具层**：念兹只认「搜索」这个动作，`tools.py` 里 `SearchProvider` 接口对 HTTP API / MCP 两种 provider 一视同仁。默认 provider 是 AnySearch 的 Streamable HTTP MCP（MCP 2025-03-26，实测无状态、无需 initialize/session 握手、匿名可用）。不依赖任何 pip 包，纯标准库 urllib。
+- **程序优先、模型兜底**：本地 4B 模型 JSON 输出不稳，所以实体识别 + 意图判断走规则（`intent.py`），模型只做可选查询词润色，失败就用规则结果继续。模型永远看不到 MCP 协议本身。
+- **中文检索**：`knowledge.py` 用 FTS5 的 trigram 分词（实测 unicode61 对中文子串搜不到，trigram 能命中）+ bigram 关键词 + 向量列 RRF 融合；FTS5 不可用时降级 LIKE。
+- **脱敏红线**：查询词去掉邮箱/手机号/URL/引号内原话，并从人设卡+别名表取称呼词表剔除人名；私人话题不当搜索词。
+- **优雅降级**：网络挂了用旧知识、没有就明说「这次没查到」，绝不编来源；模型挂了退回来源清单。
+
+**改了哪些文件**
+- 新增 `neuromem/tools.py`（AnySearch MCP 客户端 + 脱敏 + provider 工厂）、`neuromem/knowledge.py`（独立库 + 检索）、`neuromem/intent.py`（实体/意图）、`neuromem/research.py`（闭环串接 + 带出处生成）。
+- `neuromem/api.py`：加三个路由。
+- `desktop/app.py`：桌面独立进程注册同名三路由。
+- `desktop/web/logic.js`、`index.html`、`assets/app.js`、`assets/pages.css`：查证按钮、知识抽屉、来源角标与样式。
+- `.env.example`：`NEUROMEM_KNOWLEDGE_DB` / `NEUROMEM_SEARCH_PROVIDER` / `NEUROMEM_ANYSEARCH_URL` / `ANYSEARCH_API_KEY` 配置说明。
+- 新增四个测试文件 `test_tools.py` / `test_knowledge.py` / `test_intent.py` / `test_research.py`。
+
+**验证**：针对性单测 40 项全绿；真实联网端到端跑通——搜「乌江寨」拿到 5 条带 URL 来源、存独立库、二次提问命中缓存不再联网、主库 events 40→40 不变；前端 `node --check` 通过。
+
+**已知边界**：自检型自主触发（F5，她自己发现「这事没查清」主动去查）**尚未做**——当前是「用户点查证 / 明确提问」才查，不会后台自作主张联网。`ROADMAP.md` 保留 F5。AnySearch 匿名可用但限流更严，填 `ANYSEARCH_API_KEY` 可提高额度。
 
 ---
 

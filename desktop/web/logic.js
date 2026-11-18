@@ -103,6 +103,14 @@
   // 缓存音频地址：<audio> 直接 src 过来播，命中即秒开。
   const ttsAudioUrl = (key) => '/api/tts/audio/' + encodeURIComponent(key);
 
+  /* ==================== 外部知识（独立库 + AnySearch MCP） ==================== */
+  // 带出处答问：识别实体 → 查独立知识库 → 必要时联网 → 带来源回答。
+  // 首次可能十几秒（联网+生成），调用方需给 loading 态。
+  const research     = (text, force) => post('/api/research', { text: text, force: !!force });
+  // 「她知道了什么」面板：列出最近收录的外部知识 / 按关键词检索。
+  const knowledge    = (limit) => get('/api/knowledge?limit=' + (limit || 30));
+  const knowledgeFind = (q, limit) => get('/api/knowledge/search?q=' + encodeURIComponent(q || '') + '&limit=' + (limit || 8));
+
   /* ==================== 桌面壳能力 ==================== */
   const meta = () => get('/api/desktop/meta');
   // 系统通知与打开网页：pywebview 未就绪时静默降级。
@@ -132,6 +140,7 @@
     identity, identityHist, identitySave,
     ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
     settings, settingsSave, models,
+    research, knowledge, knowledgeFind,
     meta, notify, notifyReply, openWeb
   };
 })(window);

@@ -346,6 +346,64 @@ def _build_server(port):
         finally:
             c.close()
 
+    # 桌面端专用：外部知识答问（独立库，不碰 events/concepts）。
+    # 只在本进程注册。同步执行（联网+生成约十几秒），前端用 async fetch
+    # 调用不阻塞 UI；js_api 那条同步桥接不碰它。
+    @api_app.post("/api/research")
+    async def _desk_research(request: Request):
+        from neuromem import research as rmod
+        try:
+            data = await request.json()
+            text = str((data or {}).get("text") or "")
+            force = bool((data or {}).get("force"))
+        except Exception:
+            text, force = "", False
+        try:
+            from neuromem import db as _db, research as rmod
+            main_c = _db.connect()
+            try:
+                private = rmod.private_terms_from_db(main_c)
+            finally:
+                main_c.close()
+            r = rmod.research(text, private_terms=private, force=force)
+            return {"ok": True, **r.to_dict()}
+        except Exception as e:
+            return {"ok": False, "error": "%s: %s" % (type(e).__name__, str(e)[:200]),
+                    "answer": "", "sources": []}
+
+    @api_app.get("/api/knowledge")
+    def _desk_knowledge(limit: int = 30):
+        from neuromem import knowledge as kmod
+        c = None
+        try:
+            c = kmod.connect()
+            return {"ok": True, "items": [
+                {"title": h.title, "url": h.url, "snippet": h.snippet,
+                 "fetched_at": h.fetched_at, "provider": h.provider}
+                for h in kmod.list_recent(c, min(max(limit, 1), 200))],
+                **kmod.stats(c)}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "items": []}
+        finally:
+            if c is not None:
+                c.close()
+
+    @api_app.get("/api/knowledge/search")
+    def _desk_knowledge_search(q: str = "", limit: int = 8):
+        from neuromem import knowledge as kmod
+        c = None
+        try:
+            c = kmod.connect()
+            hits = kmod.search(c, q, top_k=min(max(limit, 1), 30))
+            return {"ok": True, "query": q, "items": [
+                {"title": h.title, "url": h.url, "snippet": h.snippet,
+                 "fetched_at": h.fetched_at, "score": h.score} for h in hits]}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "items": []}
+        finally:
+            if c is not None:
+                c.close()
+
     wrapped = _DesktopAuth(api_app, token)
 
     config = uvicorn.Config(

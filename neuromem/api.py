@@ -12,8 +12,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import (account, alias, auth, autoevolve, config, db, embed, evaluation,
-               identity, live, llm, meta, persona_card, proactive, rebuild,
-               selfnarrative, settings, store, tagging, usage, working_memory)
+               identity, knowledge, live, llm, meta, persona_card, proactive,
+               rebuild, research, selfnarrative, settings, store, tagging,
+               tools, usage, working_memory)
 from . import query as querymod
 from . import recall as recallmod
 from .persona import (build_profile, heal_relations, list_personas,
@@ -685,6 +686,67 @@ def ask_api(a: AskIn):
     finally:
         c.close()
     return r
+
+
+# ---------------- 外部知识（独立库，不碰 events/concepts） ----------------
+class ResearchIn(BaseModel):
+    text: str
+    force: bool = False
+
+
+@app.post("/api/research")
+def research_api(a: ResearchIn):
+    """带出处的答问：识别实体 → 查独立知识库 → 必要时联网 → 带来源回答。
+
+    同步执行（联网 + 生成约十几秒）；桌面端桥接层需在后台线程调用，
+    避免阻塞 WebView UI。任何失败在 research.research 内部已降级为
+    「没查到」，不会把 500 抛给前端。
+    """
+    try:
+        main_c = conn()
+        try:
+            private = research.private_terms_from_db(main_c)
+        finally:
+            main_c.close()
+        r = research.research(a.text or "", private_terms=private, force=a.force)
+        return {"ok": True, **r.to_dict()}
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}",
+                "answer": "", "sources": []}
+
+
+@app.get("/api/knowledge")
+def knowledge_list(limit: int = 30):
+    """「她知道了什么」面板：按抓取时间倒序列出独立知识库条目。"""
+    c = None
+    try:
+        c = knowledge.connect()
+        return {"ok": True, "items": [
+            {"title": h.title, "url": h.url, "snippet": h.snippet,
+             "fetched_at": h.fetched_at, "provider": h.provider}
+            for h in knowledge.list_recent(c, min(max(limit, 1), 200))],
+            **knowledge.stats(c)}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "items": []}
+    finally:
+        if c is not None:
+            c.close()
+
+
+@app.get("/api/knowledge/search")
+def knowledge_search(q: str = "", limit: int = 8):
+    c = None
+    try:
+        c = knowledge.connect()
+        hits = knowledge.search(c, q, top_k=min(max(limit, 1), 30))
+        return {"ok": True, "query": q, "items": [
+            {"title": h.title, "url": h.url, "snippet": h.snippet,
+             "fetched_at": h.fetched_at, "score": h.score} for h in hits]}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "items": []}
+    finally:
+        if c is not None:
+            c.close()
 
 
 # ---------------- 模型配置 ----------------

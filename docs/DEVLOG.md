@@ -1245,6 +1245,48 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
 
+## v34：外部知识闭环 + AnySearch MCP（2026-11-18）
+
+用户诉求：聊到乌江寨，她能自己去查；知识按关键字可检索、能反哺回答；把网页查询 MCP `https://api.anysearch.com/mcp` 接进来，让她「有使用工具的能力」。这是 ROADMAP 自进化章节 F1–F4/F4b/F6 的落地。
+
+### 摸清 AnySearch MCP（实测，不是照文档猜）
+
+- 传输是 **Streamable HTTP**（MCP 2025-03-26），不是 SSE/stdio。端点直接 POST JSON-RPC 2.0，响应 `application/json`（也兼容 `text/event-stream`）。
+- **无状态**：实测不需要 `initialize` 握手、不需要 `Mcp-Session-Id`，直接 `tools/call` 就能用。这点很关键——省掉一整套会话管理。
+- 工具：`search`（通用/垂直域，参数 `query` + `max_results`≤10）、`extract`（URL→Markdown 正文）、`batch_search`、`get_sub_domains`、`score`。
+- 鉴权：`ANYSEARCH_API_KEY` 走 `Authorization: Bearer`，**匿名可用**（限流更严）。本机无 key，匿名实测 `search("乌江寨")` 返回 10 条带 URL 的结果，含官网 2026-10 的廊桥封闭公告——本地模型给不了的时效信息。
+- `search` 返回是 Markdown 文本（`### N. 标题` / `- **URL**:` / 摘要 + 末尾 yaml `request_id`），所以要写解析器转结构化。
+
+### 为什么独立 DB 而不是主库独立表
+
+ROADMAP 红线是「外部信息不写进 events/concepts」。调研确认项目没有 FTS5 先例、但有独立 DB 文件先例（`evaluation.db`）。**物理隔离比约定可靠**——就算将来有人误写也碰不到主库一行。所以用 `data/knowledge.db`，`NEUROMEM_KNOWLEDGE_DB` 覆盖（测试靠它隔离，且必须在 import 前设 env，config 加载顺序老坑）。实测主库 events 40→40 不变。
+
+### 中文检索：unicode61 搜不到，trigram 可以
+
+实测 SQLite 3.53：`unicode61` 分词器对「乌江寨」在中文整句里 `MATCH` 返回空；换成 `tokenize='trigram'` 能命中。所以 FTS5 虚表用 trigram。另外 trigram 要求查询词≥3 字符，短词用 LIKE + bigram 兜底；FTS5 完全不可用的环境降级纯 LIKE 打分。向量列走 `db.pack/unpack` + cosine，和关键词用 RRF 融合。
+
+### 踩坑：entity.kind_of() 不能拿来判断「是不是人」
+
+`entity.kind_of()` 是保守设计——**任何不认识的词一律返回 `person`**，而且它的地名后缀表不含「寨 / 古镇」。第一版拿 `kind_of(w) in ("person","time","group")` 当排除条件，结果乌江寨、长安的荔枝、尊嘟假嘟全被误杀（11 项测试红）。改成只排除明确的宠物/时间 `kind_of(w) in ("pet","time")` + 亲属后缀表，人名主要靠 `private_terms` 词表（人设卡 + 别名表）兜底。第二版全绿。**教训：复用既有函数前先看清它的默认值语义。**
+
+### 另一个坑：中文没词边界，取实体会吞整句
+
+地名后缀往前找连续中文，会把「今天我们聊了乌江寨」整句吞成实体。加 `_NOISE_PREFIX_RE` 剥掉口语前缀；私人词是**从候选里剥掉**（「微微说她去了乌江寨」→ 留下乌江寨）而不是整条丢弃。中文单引号 `‘’` 也要进引号表，否则「‘尊嘟假嘟’是什么梗」抽不到。
+
+### 程序优先、模型兜底
+
+本地 qwen3.5:4b 的 JSON 输出要靠重试兜底，不能让它承重。所以意图层走规则：`intent.build_intent()` 判要不要查，`refine_intent()` 只是可选的模型润色，模型输出含私人词或抛异常都原样退回规则结果。模型永远不接触 MCP 协议。
+
+### 防打扰（承接「程序化主动关心」的教训）
+
+- 不在每句话上做联网判断：桌面端是每条回复下的「查一下」按钮，用户点了才查。
+- 查询词只留实体：去邮箱/手机号/URL/引号内原话 + 剔人名，不带对话上下文外发。
+- 查不到明说，不编来源；模型挂了退回来源清单。
+
+### 已知边界
+
+F5（自主发现缺口、后台自己决定去查）未做：当前是「用户点查证 / 明确问」才查。AnySearch 匿名限流，要提额填 key。前端来源角标用 `window.open(url, "_blank")`，桌面端走系统浏览器而非 WebView 内嵌。
+
 ## v33：品牌「念兹」与脱离控制台（2026-11-18）
 
 ### 品牌怎么定的

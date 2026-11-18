@@ -87,6 +87,10 @@
           <span>查看记忆</span>
           <span class="menu__tag">后台</span>
         </button>
+        <button class="menu__item" id="knowledgeItem" type="button" role="menuitem">
+          <span>她知道了什么</span>
+          <span class="menu__tag">外部知识</span>
+        </button>
 
         <div class="menu__sep" role="separator"></div>
         <button class="menu__item menu__item--compact" type="button" role="menuitem" disabled>
@@ -177,6 +181,30 @@
 </aside>
 
 <div class="toast-wrap">
+<!-- ==================== 外部知识抽屉（她自己查来的东西） ==================== -->
+<aside class="drawer" id="knowledgeDrawer" hidden aria-label="她知道了什么">
+  <div class="drawer__panel">
+    <div class="drawer__head">
+      <div>
+        <h2 class="drawer__title" id="knowledgeTitle">她知道了什么</h2>
+        <p class="drawer__sub" id="knowledgeSub">她自己查来的资料，和你说过的记忆分开存</p>
+      </div>
+      <button class="icon-btn" type="button" data-close aria-label="关闭">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </button>
+    </div>
+    <div class="drawer__body knowledge-body">
+      <form class="knowledge-search" id="knowledgeSearchForm">
+        <input id="knowledgeQuery" type="search" placeholder="搜她学过的东西，如 乌江寨" maxlength="80" autocomplete="off">
+        <button type="submit">查</button>
+      </form>
+      <p class="knowledge-status" id="knowledgeStatus" hidden></p>
+      <div class="knowledge-list" id="knowledgeList"></div>
+      <p class="knowledge-hint">这里的每条都带来源网址和抓取时间。她记得你说的话，是另一套，不在这里。</p>
+    </div>
+  </div>
+</aside>
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
     <span id="toastText"></span>
