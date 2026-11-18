@@ -109,6 +109,10 @@
   function notify(title, message) {
     try { if (global.pywebview && global.pywebview.api) global.pywebview.api.notify(title, message); } catch (e) {}
   }
+  // 回复就绪通知：文字与语音都准备好才由前端调用，点击回聊天页。
+  function notifyReply(title, message) {
+    try { if (global.pywebview && global.pywebview.api) global.pywebview.api.notify_reply(title, message); } catch (e) {}
+  }
   function openWeb(tab) {
     try {
       if (global.pywebview && global.pywebview.api) global.pywebview.api.open_web(tab || '');
@@ -128,6 +132,6 @@
     identity, identityHist, identitySave,
     ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
     settings, settingsSave, models,
-    meta, notify, openWeb
+    meta, notify, notifyReply, openWeb
   };
 })(window);

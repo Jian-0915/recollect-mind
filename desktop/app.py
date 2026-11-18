@@ -8,11 +8,13 @@
   web 服务鉴权行为完全不变。
 - 前端：desktop/web/ 整目录挂到 /desk/，页面与 assets 用相对路径（设计稿原样）。
   index.html = 对话页，settings.html = 人设设置，logic.js = 接口层。
-- 主动关心：前端轮询 /api/proactive 显示气泡；系统通知通过 js_api 的
-  notify() 桥接（Windows 用 PowerShell toast，失败静默降级为窗口内气泡）。
+- 主动关心：前端轮询 /api/proactive 显示气泡；系统通知走 js_api 的
+  notify()（Windows 原生可点击 Toast，点击回到聊天页；失败降级气球）。
 - 语音（V6）：桌面壳拉起本地 tts-server 常驻服务（desktop/tts.py），
   /api/tts/status 报可用性、/api/tts 流式转发合成音频给前端播放。
   手动触发，不自动念；缺模型/服务失败时按钮隐藏，不影响对话。
+- 回复通知：文字气泡与语音缓存都就绪后，前端调 notify_reply() 发系统
+  通知（像微信来消息），点击回聊天页；语音不可用时降级为文字即通知。
 
 启动：
     python desktop/app.py
@@ -324,29 +326,65 @@ def _build_server(port):
 
 
 def _toast(title, message):
-    """Windows 系统通知；失败静默（窗口内气泡始终可用）。"""
-    try:
-        import subprocess
-        title_esc = str(title).replace("'", "''")
-        msg_esc = str(message).replace("'", "''")[:200]
-        ps = (f"Add-Type -AssemblyName System.Windows.Forms;"
-              f"$n=New-Object System.Windows.Forms.NotifyIcon;"
-              f"$n.Icon=[System.Drawing.SystemIcons]::Information;"
-              f"$n.BalloonTipTitle='{title_esc}';"
-              f"$n.BalloonTipText='{msg_esc}';"
-              f"$n.Visible=$true;$n.ShowBalloonTip(5000);"
-              f"Start-Sleep -Milliseconds 5200;$n.Dispose()")
-        subprocess.Popen(["powershell", "-NoProfile", "-Command", ps],
-                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except Exception:
-        pass
+    """兼容旧调用：只发不可点击的气球提示。新通知走 desktop.notify.send。"""
+    from desktop import notify
+    return notify._balloon(title, message)
 
 
 class _Api:
     """暴露给前端 JS 的桥接方法（pywebview js_api）。"""
 
+    def __init__(self, port=None):
+        self.window = None
+        self._chat_url = f"http://{HOST}:{port or PORT}/desk/index.html"
+
     def notify(self, title, message):
-        _toast(title or TITLE, message or "")
+        """系统通知（主动关心等场景）：可点击，点了回到聊天页。"""
+        from desktop import notify
+        notify.send(title or TITLE, message or "", self._focus_chat)
+
+    def notify_reply(self, title, message):
+        """她的回复就绪后由前端调用：系统通知，点击直接回聊天页。
+
+        与 notify() 分开命名，是为了让前端明确「这条是等语音和文字都
+        准备好之后才发的」，也让日后能给两类通知不同的点击行为。
+        """
+        from desktop import notify
+        notify.send(title or TITLE, message or "", self._focus_chat)
+
+    def _focus_chat(self):
+        """系统通知被点击：恢复窗口并回到聊天页，聚焦输入框。"""
+        w = self.window
+        if w is None:
+            return
+        try:
+            w.restore()
+        except Exception:
+            pass
+        try:
+            w.show()
+        except Exception:
+            pass
+        try:
+            # 已在聊天页：只把光标放回输入框、滚到底，不重载页面（保住草稿）。
+            on_chat = w.evaluate_js(
+                "!!document.getElementById('input') && "
+                "!!document.getElementById('chat')"
+            )
+            if on_chat is True or on_chat == "true":
+                w.evaluate_js(
+                    "var i=document.getElementById('input');"
+                    "if(i){i.focus();}"
+                    "var c=document.getElementById('chat');"
+                    "if(c){c.scrollTop=c.scrollHeight;}"
+                )
+            else:
+                w.load_url(self._chat_url + "?from=notify")
+        except Exception:
+            try:
+                w.load_url(self._chat_url + "?from=notify")
+            except Exception:
+                pass
 
     def open_web(self, tab=""):
         try:
@@ -406,7 +444,7 @@ def main():
             pass
     threading.Thread(target=_tts_boot, name="tts-boot", daemon=True).start()
 
-    api = _Api()
+    api = _Api(port)
     window = webview.create_window(
         TITLE,
         f"http://{HOST}:{port}/desk/",
@@ -417,6 +455,8 @@ def main():
         background_color="#1a1a1a",
         confirm_close=False,
     )
+    # 通知点击要能操作窗口：把窗口句柄交给桥接对象（create_window 之后才有）。
+    api.window = window
     # 关窗后停服务、回收 TTS 子进程、退出进程
     def _on_closed():
         try:

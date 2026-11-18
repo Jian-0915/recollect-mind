@@ -1,3 +1,6 @@
 requests>=2.31
 networkx>=3.2
 numpy>=1.26
+# 桌面端「回复就绪」系统通知：Windows 原生可点击 Toast。
+# 仅 Windows 需要；非 Windows 或未安装时桌面端自动降级为无点击的气球提示。
+win11toast>=0.36; sys_platform == "win32"

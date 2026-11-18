@@ -366,6 +366,30 @@ function rewarmAllBubbles() {
 // 用户开口（发送新消息）时打断正在念的语音
 function stopSpeaking() { ttsPlayer.stop(); }
 
+// 回复就绪才弹系统通知：文字已渲染 + 语音缓存已落盘。
+// ttsEnsure 会等后台合成完成（正常几秒），所以通知天然晚于两者；
+// 序号防止连续发消息时旧回复的通知迟到覆盖新的。语音服务不可用时降级为
+// 文字即通知——否则没装模型就永远收不到提醒，违背「像微信来信息」的初衷。
+var replyNoticeSeq = 0;
+function fireReplyNotice(text, voice) {
+  if (!text || !window.DeskAPI || !DeskAPI.notifyReply) return;
+  var seq = ++replyNoticeSeq;
+  var title = (window.__botName || "").trim() ||
+    (function () { try { return (localStorage.getItem("ache.name") || "").trim(); } catch (e) { return ""; } })() ||
+    "阿澈";
+  function fire() {
+    if (seq !== replyNoticeSeq) return;
+    try { DeskAPI.notifyReply(title, text); } catch (e) {}
+  }
+  try {
+    if (window.DeskAPI.ttsEnsure) {
+      DeskAPI.ttsEnsure(text, voice || getTtsPrefs().voice).then(fire, fire);
+    } else {
+      fire();
+    }
+  } catch (e) { fire(); }
+}
+
   function initChat() {
     var chat = $("#chat");
     var stream = $("#stream");
@@ -576,7 +600,10 @@ function stopSpeaking() { ttsPlayer.stop(); }
           showSendError((r && (r.hint || r.error)) || "没发出去，" + botName() + "没收到。");
           return;
         }
-        insert(himMessage(r.reply || "……", memoryLabel(r)));
+        // 文字气泡已插入、语音交给 himMessage 预热；等缓存真正落盘后弹系统通知。
+        var replyText = r.reply || "……";
+        insert(himMessage(replyText, memoryLabel(r)));
+        fireReplyNotice(replyText, getTtsPrefs().voice);
         bumpSummary(r);
         toEnd();
       }).catch(function () {
@@ -871,6 +898,14 @@ function stopSpeaking() { ttsPlayer.stop(); }
       if (e && e.key === TTS_VOICE_CHANGE_KEY) rewarmAllBubbles();
     });
     window.addEventListener("focus", rewarmAllBubbles);
+
+    // 通知点击回跳时若刚重载页面，把光标放回输入框、滚到最新一条。
+    if (/[?&]from=notify\b/.test(window.location.search)) {
+      window.setTimeout(function () {
+        try { input.focus(); } catch (e) {}
+        toEnd();
+      }, 300);
+    }
   }
 
   /* ==========================================================================

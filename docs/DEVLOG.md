@@ -1224,6 +1224,27 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 全量单测 466 passed；新增断言锁住音频路由必须 no-store。
 
+## v31：回复就绪系统通知（2026-11-18）
+
+### 为什么做
+
+用户："当她回复信息的时候，一切准备好了直接弹窗，像微信来信息那样。必须是语音和文字都准备好了再发送弹窗，发送的是系统弹窗，点击了直接回到聊天页面。"
+
+关键词是**「系统弹窗」「都准备好」「点击回聊天页」**三条，缺一不可。旧的 `notify()` 走 `System.Windows.Forms.NotifyIcon.ShowBalloonTip`，没有可用的点击回调，做不到回跳，必须换实现。
+
+### 关键决策与实测
+
+- **选哪种系统通知**：先实测 `win11toast`（WinRT Toast）在本机 —— `pip install win11toast` 后发一条带 `on_click` 的 toast，实测 3.37 秒内回调触发（打印 `CLICKED`，拿到 `arguments`），证明"点击可回调"这条路在本机成立。气球提示出局。
+- **不能阻塞桌面端**：`win11toast.toast()` 内部会等到「点击 / 消失 / 失败」之一才返回（实测 3.37s 才 return），绝不能在 js_api 调用栈里同步发。放进 `nm-toast` 守护线程，调用方立即返回。
+- **"都准备好"的门闩怎么落**：文字在 `insert(himMessage(...))` 时就绪；语音用 `/api/tts/ensure` 等缓存落盘（正常几秒）。`fireReplyNotice()` 在 `ttsEnsure` 的 then 里才调 `notify_reply` —— 天然满足"语音+文字都好了才弹"。连发多条用递增 `replyNoticeSeq` 作废旧通知，只弹最后一条。
+- **语音不可用的取舍**：`ttsEnsure` 秒回 `ok:false` 时降级为文字即通知。严格按用户字面"没语音就不弹"会导致装不上模型时完全收不到提醒，取舍上选"提醒不丢"。这是明确的降级语义，写进 CHANGELOG。
+- **点击回跳的细节**：`_focus_chat()` 先 `restore()+show()`；已在聊天页（探测 `#input`/`#chat`）只聚焦输入框、不 `load_url`，**保住没发出去的草稿**；在设置页等其它页才加载 `index.html?from=notify`，前端读到这个标记再聚焦+滚到底。
+- **依赖冲突提醒**：`pip install win11toast` 时 pip 提示 `streamlit 1.51.0 requires packaging<26`（本机 packaging 已是 26.0）与 `speechrecognition` 缺 `standard-aifc`。这些是环境里既有的版本张力，win11toast 本身不依赖 packaging，未改动它们；如果将来 streamlit 出问题，单独降 packaging 即可，与本项目无关。
+
+### 验证
+
+新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
+
 ## 服务管理
 ```bash
 python service.py start      # 后台启动，轮询 /api/health 确认就绪
