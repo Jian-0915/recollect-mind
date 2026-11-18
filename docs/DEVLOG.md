@@ -1042,6 +1042,19 @@ temper = (0.25 + 0.75 × 剩余时间比例) − 0.5 × 被哄程度 − 0.08 ×
 - 新增 `tests/unit/test_desktop_bridge.py`（4 条）：合法 tab 深链、非法 tab 丢弃、错误 token 不种 cookie、后台带 `?tab=` 正常出页。全量 447 passed。
 - 主库零写入。改的是桌面前端 / 登录桥 / 后台启动块，没碰人设与记忆数据。
 
+## V5 语音方案改道：Piper → Qwen3-TTS GGUF（2026-11-18）
+
+用户报"我的 GPU 是 8G"，最初按 `Win32_VideoController.AdapterRAM` 读到的 4GB 判断是记错了——**这个判断本身错了**。WMI 的 `AdapterRAM` 是 32 位字段，4GB 就封顶（返回 4293918720），RX 6600 标准版本来就是 8GB GDDR6。注册表 `qwMemorySize` 在当前权限下读不到，于是只剩这个被截断的值。**教训：读显存别信 `AdapterRAM`，32 位字段天然截 4GB 以上。**
+
+方案随之改动，两个原因：
+
+1. **Piper 不是最好的选择了**。上次定 Piper 的前提是"没有 N 卡、CUDA 系模型全跑不了"。但社区已有 `Serveurperso/Qwen3-TTS-GGUF` + `qwentts.cpp`，走 Vulkan 后端，AMD / Intel 显卡都能用；授权还比 Piper 干净（模型 Apache-2.0 + 工具 MIT，Piper 引擎是 GPL-3.0、huayan 数据集授权 Unknown）。
+2. **"0.6B 最低 4G"这个数字有误导性**。那是官方 CUDA + bf16 路径的社区估算，不适用 GGUF 量化。量化后体积：1.7B Q8_0 2.1GB + tokenizer 291MB，Q4_K_M 1.2+0.255GB，0.6B Q8_0 993+291MB。8G 卡直接上 1.7B Q8_0，不用降到 0.6B（0.6B 还没有 VoiceDesign）。
+
+官方 `qwen-tts` 包是 CUDA-only，README 全用 `device_map="cuda:0"`，无 ROCm / CPU / MPS 路径——这条限制没变，变的是有了 GGUF 绕路。
+
+**没实测就不能写"已定"**：qwentts.cpp 要在 Windows 上编译（C++17/GGML），Vulkan 工具链还没在本机跑过；llama.cpp issue #32050 记录了 AMD Radeon（8060S + RADV）Vulkan cooperative matrices 下重复请求音频不一致，关掉该特性可解，RX 6600 独显是否触发未知。所以 ROADMAP V5 保持未勾选，改成"方案已改、待实装验证"。
+
 ## 服务管理
 
 ```bash
