@@ -404,6 +404,37 @@ def _build_server(port):
             if c is not None:
                 c.close()
 
+    # F5 自主外部获取：状态 / 审计日志 / 开关
+    @api_app.get("/api/autoresearch/status")
+    def _desk_autoresearch_status():
+        from neuromem import autoresearch as ar
+        return {"ok": True, **ar.status()}
+
+    @api_app.get("/api/autoresearch/log")
+    def _desk_autoresearch_log(limit: int = 30):
+        from neuromem import knowledge as kmod
+        c = None
+        try:
+            c = kmod.connect()
+            return {"ok": True, "items": kmod.list_autoresearch(
+                c, min(max(limit, 1), 200))}
+        except Exception as e:
+            return {"ok": False, "error": str(e), "items": []}
+        finally:
+            if c is not None:
+                c.close()
+
+    @api_app.post("/api/autoresearch/toggle")
+    async def _desk_autoresearch_toggle(request: Request):
+        from neuromem import autoresearch as ar
+        try:
+            data = await request.json()
+            on = bool((data or {}).get("enabled"))
+            ar.set_enabled(on)
+            return {"ok": True, "enabled": ar.enabled()}
+        except Exception as e:
+            return {"ok": False, "error": str(e)}
+
     # 外部 MCP 服务管理：桌面独立进程也需要（共用 api_app 对象但不共享注册时机）
     @api_app.get("/api/mcp/servers")
     def _desk_mcp_servers():

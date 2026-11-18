@@ -107,3 +107,40 @@ def test_main_db_untouched(tmp_path):
     assert not main_conn.execute(
         "SELECT name FROM sqlite_master WHERE name LIKE '%knowledge%'").fetchall()
     main_conn.close()
+
+
+def test_autoresearch_log_in_separate_db(conn, tmp_path):
+    """F5 审计日志：字段完整、只在独立库、留痕可查。"""
+    lid = knowledge.log_autoresearch(
+        conn, entity="乌江寨", query="乌江寨 有什么好玩的",
+        reason="对话里出现未知地名", hit_count=5, source_event="evt_1")
+    assert lid > 0
+    items = knowledge.list_autoresearch(conn)
+    assert len(items) == 1
+    row = items[0]
+    assert row["entity"] == "乌江寨"
+    assert row["reason"] == "对话里出现未知地名"
+    assert row["hit_count"] == 5
+    assert row["status"] == "ok"
+    assert row["source_event"] == "evt_1"
+    assert row["created_at"]
+
+    # 主库里没有这张表（物理隔离）
+    main = nm_db.connect(tmp_path / "main.db")
+    names = [r[0] for r in main.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")]
+    assert "autoresearch_log" not in names
+    main.close()
+
+
+def test_autoresearch_count_and_last_at(conn):
+    from datetime import datetime, timedelta, timezone
+    knowledge.log_autoresearch(conn, entity="A", hit_count=1)
+    knowledge.log_autoresearch(conn, entity="B", hit_count=2)
+    # 全在"很久以前"之后 → 计数应为 2
+    old = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    assert knowledge.autoresearch_count_since(conn, old) == 2
+    # 在未来时间点之后 → 0
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    assert knowledge.autoresearch_count_since(conn, future) == 0
+    assert knowledge.autoresearch_last_at(conn)  # 非空

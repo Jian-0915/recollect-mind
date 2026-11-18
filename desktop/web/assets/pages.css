@@ -1725,3 +1725,54 @@
 }
 
 .mcp-test-result.is-bad { color: var(--danger, #c0392b); }
+
+/* F5 自主查询区：开关 + 审计日志 */
+.auto-block {
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-12);
+  background: var(--surface-2);
+}
+
+.auto-block__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auto-block__title {
+  color: var(--ink);
+  font-size: var(--fs-12);
+  font-weight: 500;
+}
+
+.auto-block__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--clay-700);
+  font-size: var(--fs-11);
+  cursor: pointer;
+}
+
+.auto-block__meta {
+  margin: 6px 0 0;
+  color: var(--ink-3);
+  font-size: var(--fs-10);
+}
+
+.auto-log {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.auto-log[hidden] { display: none; }
+
+.auto-log__row {
+  margin: 0 0 5px;
+  color: var(--ink-2);
+  font-size: var(--fs-10);
+  line-height: 1.5;
+}

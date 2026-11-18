@@ -214,6 +214,14 @@ EVOLVE_EVENT_THRESHOLD = 5     # 新增事件达到该数量触发一轮
 EVOLVE_MIN_EVENTS = 3          # 事件少于该数不代谢（省 LLM 调用）
 EVOLVE_MIN_GAP = 60            # 两次代谢最小间隔（秒，防抖）
 
+# --- 自主获取外部信息（F5，2026-11-18）---
+# 她发现对话里有意义的未知实体时自己去查。默认开；NEUROMEM_AUTORESEARCH=0 关。
+AUTORESEARCH = os.environ.get("NEUROMEM_AUTORESEARCH", "1") != "0"
+AUTORESEARCH_DAILY = int(_env("AUTORESEARCH_DAILY", "3"))       # 每天最多自主查几次
+AUTORESEARCH_GAP_MIN = int(_env("AUTORESEARCH_GAP_MIN", "30"))  # 两次查询最小间隔（分钟）
+AUTORESEARCH_QUIET_FROM = int(_env("AUTORESEARCH_QUIET_FROM", "23"))
+AUTORESEARCH_QUIET_TO = int(_env("AUTORESEARCH_QUIET_TO", "8"))
+
 # --- 陪伴层（2026-11-14）：把认知状态接进提取与表达 ---
 COMPANION_STATE = True          # 情绪 / 自叙事 / 画像 / 会话态进入回答提示词与检索结果
 ACTIVATION_WEIGHT = 0.15       # 召回基础分的「提取容易度」调制：s *= (1-w) + w*activation

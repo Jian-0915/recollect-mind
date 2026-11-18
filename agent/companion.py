@@ -27,6 +27,31 @@ from neuromem.brain import Brain
 from . import prompts
 from .bootstrap import ensure_lab_settings, is_project_lab_db, sync_l0_from_main
 
+
+def _knowledge_block_for(text):
+    """F5：从独立知识库找与本轮相关、她自己查来的资料，拼成 prompt 块。
+
+    查不到 / 出错返回空串——保持提示词与旧版一字不差。只读独立库，
+    绝不碰主库或 lab 库。
+    """
+    try:
+        from neuromem import intent as _intent, knowledge as _knowledge
+        entities = _intent.extract_entities(text)
+        if not entities:
+            return ""
+        conn = _knowledge.connect()
+        try:
+            hits = []
+            for e in entities[:2]:          # 最多 2 个实体，避免 prompt 膨胀
+                for h in _knowledge.search(conn, e, top_k=2):
+                    if all(h.url != seen.url for seen in hits):
+                        hits.append(h)
+            return prompts.build_knowledge_block(hits[:3])
+        finally:
+            conn.close()
+    except Exception:
+        return ""
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 LAB_DB = BASE_DIR / "data" / "agent_lab.db"
 LAB_TRACE = BASE_DIR / "data" / "agent_lab.trace.jsonl"
@@ -751,9 +776,12 @@ class CompanionAgent:
                     provoke = nm_motivation.provoked(text)
             except Exception:
                 sulk_ctx, provoke = None, 0.0
+        # F5：把她自己查到、且和本轮相关的资料注入。只读独立知识库，
+        # 查不到返回空串 → prompt 与旧版一字不差（向后兼容）。
+        _kb_block = _knowledge_block_for(text)
         prompt = (prompts.build_prompt(pack, text, self.history, self.counterpart,
                                        fact_guard=guard_on, sulk=sulk_ctx,
-                                       provoke=provoke)
+                                       provoke=provoke, knowledge_block=_kb_block)
                   if self.brain else
                   prompts.build_prompt_no_brain(
                       self.identity_block, text, self.history, self.counterpart,

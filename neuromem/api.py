@@ -11,8 +11,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import (account, alias, auth, autoevolve, config, db, embed, evaluation,
-               identity, knowledge, live, llm, meta, persona_card, proactive,
+from . import (account, alias, auth, autoevolve, autoresearch, config, db, embed,
+               evaluation, identity, knowledge, live, llm, meta, persona_card, proactive,
                rebuild, research, selfnarrative, settings, store, tagging,
                tools, usage, working_memory)
 from . import query as querymod
@@ -747,6 +747,39 @@ def knowledge_search(q: str = "", limit: int = 8):
     finally:
         if c is not None:
             c.close()
+
+
+# ---------------- 自主外部获取（F5）----------------
+@app.get("/api/autoresearch/status")
+def autoresearch_status():
+    """她自己查资料的状态：开关、今日次数、最近时间。"""
+    return {"ok": True, **autoresearch.status()}
+
+
+@app.get("/api/autoresearch/log")
+def autoresearch_log(limit: int = 30):
+    """自主查询审计：她何时、为何、查了什么。"""
+    c = None
+    try:
+        c = knowledge.connect()
+        return {"ok": True, "items": knowledge.list_autoresearch(
+            c, min(max(limit, 1), 200))}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "items": []}
+    finally:
+        if c is not None:
+            c.close()
+
+
+@app.post("/api/autoresearch/toggle")
+def autoresearch_toggle(p: dict):
+    """开/关自主查询（进程内生效，重启回 config 默认）。"""
+    try:
+        on = bool((p or {}).get("enabled"))
+        autoresearch.set_enabled(on)
+        return {"ok": True, "enabled": autoresearch.enabled()}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
 
 
 # ---------------- 模型配置 ----------------

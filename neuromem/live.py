@@ -36,6 +36,13 @@ from pathlib import Path
 
 from . import config
 
+# F5：对话后异步发现未知实体、自己去查（守护线程，不阻塞本轮回复）。
+# 导入放这里为零开销兜底：autoresearch 失败绝不能影响对话主链路。
+try:
+    from . import autoresearch as _autoresearch
+except Exception:
+    _autoresearch = None
+
 ENABLED = os.environ.get("NEUROMEM_LIVE_WEB", "1") != "0"
 MAX_INPUT = 2000
 
@@ -219,6 +226,17 @@ def turn(text):
         _stats["last_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
         _stats["last_ms"] = row.get("elapsed_ms") or int((time.time() - t0) * 1000)
         _append_trace(row)
+        # F5：本轮说完之后，后台看看有没有值得自己去查的未知实体。
+        # 整段包在 try 里——自主获取的任何失败都不能污染正常对话返回。
+        if _autoresearch is not None:
+            try:
+                if _autoresearch.enabled():
+                    from .research import private_terms_from_db
+                    _autoresearch.observe(
+                        text, private_terms=private_terms_from_db(),
+                        source_event=str(row.get("turn") or "")[:60])
+            except Exception:
+                pass
         return {
             "ok": True,
             "reply": row.get("reply") or "",

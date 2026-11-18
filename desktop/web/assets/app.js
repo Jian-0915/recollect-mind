@@ -196,6 +196,62 @@
         loadKnowledge(q.trim());
       });
     }
+    initAutoSection();
+  }
+
+  /* F5：抽屉里的「她自己去查」——开关 + 审计日志 */
+  function initAutoSection() {
+    var toggle = $("#autoToggle");
+    var label = $("#autoToggleLabel");
+    var line = $("#autoStatusLine");
+    var logEl = $("#autoLog");
+
+    function render(st) {
+      if (toggle) toggle.checked = !!(st && st.enabled);
+      if (label) label.textContent = st && st.enabled ? "开启" : "已关闭";
+      if (line) {
+        var today = (st && st.today_count) || 0;
+        var cap = (st && st.daily_cap) || 0;
+        var last = (st && st.last_at || "").replace("T", " ").slice(0, 16);
+        line.textContent = "今天自己查了 " + today + "/" + cap + " 次"
+          + (last ? " · 最近 " + last : " · 还没查过");
+      }
+    }
+    function loadStatus() {
+      if (!window.DeskAPI || !DeskAPI.autoStatus) return;
+      DeskAPI.autoStatus().then(function (st) {
+        render(st);
+        if (st && st.enabled && DeskAPI.autoLog) {
+          DeskAPI.autoLog(10).then(function (r) {
+            if (!logEl) return;
+            var items = (r && r.items) || [];
+            if (!items.length) { logEl.hidden = true; return; }
+            logEl.hidden = false;
+            logEl.innerHTML = "";
+            items.forEach(function (row) {
+              var line2 = document.createElement("p");
+              line2.className = "auto-log__row";
+              var when = (row.created_at || "").replace("T", " ").slice(0, 16);
+              line2.textContent = when + " · " + (row.entity || "")
+                + " · " + (row.hit_count || 0) + " 条"
+                + (row.reason ? " · " + row.reason : "");
+              logEl.appendChild(line2);
+            });
+          }).catch(function () {});
+        } else if (logEl) logEl.hidden = true;
+      }).catch(function () { if (line) line.textContent = "状态读取失败"; });
+    }
+    if (toggle) {
+      toggle.addEventListener("change", function () {
+        if (!window.DeskAPI || !DeskAPI.autoToggle) return;
+        var on = toggle.checked;
+        DeskAPI.autoToggle(on).then(function (r) {
+          if (r && r.ok) loadStatus();
+          else { toggle.checked = !on; if (line) line.textContent = "设置失败"; }
+        }).catch(function () { toggle.checked = !on; });
+      });
+    }
+    loadStatus();
   }
 
   initKnowledge();

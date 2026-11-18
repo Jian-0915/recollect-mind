@@ -242,8 +242,38 @@ def build_provoke_block(text):
             % str(text or "")[:40])
 
 
+def build_knowledge_block(hits):
+    """F5：把她自己查到的外部知识注入对话。没有命中就返回空串（提示词不变）。
+
+    关键措辞：明确这是「你自己查到的资料」，不是「对方说过的记忆」——
+    两种来源混在一起会让她把网上的话当成用户亲口说的，是事实穿帮的根源。
+    """
+    if not hits:
+        return ""
+    lines = []
+    for i, h in enumerate(hits[:3], 1):
+        title = str(getattr(h, "title", "") or "")[:60]
+        snippet = str(getattr(h, "snippet", "") or "")[:160]
+        url = str(getattr(h, "url", "") or "")[:100]
+        if not (title or snippet):
+            continue
+        line = "[%d] %s" % (i, title)
+        if snippet:
+            line += "：" + snippet
+        if url:
+            line += "（来源 %s）" % url
+        lines.append(line)
+    if not lines:
+        return ""
+    return ("【你自己查到的资料（不是对方说过的，别当成他的记忆）】\n"
+            + "\n".join(lines)
+            + "\n可以自然用这些说话，但只说资料里有的；"
+              "不确定就说「我还不清楚」。")
+
+
 def build_prompt(pack, user_text, history, counterpart="用户",
-                 fact_guard=False, now=None, sulk=None, provoke=0.0):
+                 fact_guard=False, now=None, sulk=None, provoke=0.0,
+                 knowledge_block=""):
     """接记忆的正式通道：身份 → 时间 → 候选 → 状态 → 最近对话 → 本轮输入。
 
     fact_guard=True 时切换到带 claims 的契约与「禁止补充细节」硬规则，
@@ -264,6 +294,8 @@ def build_prompt(pack, user_text, history, counterpart="用户",
         parts.append(build_sulk_block(sulk.get("temper"), sulk.get("person")))
     elif provoke:
         parts.append(build_provoke_block(user_text))
+    if knowledge_block:
+        parts.append(knowledge_block)
     parts += [
         "【%s本轮说】%s" % (counterpart, user_text),
         "【按这个结构输出】\n" + (OUTPUT_FIELDS_GUARDED if fact_guard

@@ -39,6 +39,20 @@ CREATE TABLE IF NOT EXISTS knowledge_docs (
   embedding   BLOB
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_fetched ON knowledge_docs(fetched_at DESC);
+
+-- 自主查询审计日志：她自己发现缺口去查时留痕（何时/为何/查了什么/结果几条）。
+-- 同样只存在独立库，绝不写主库。
+CREATE TABLE IF NOT EXISTS autoresearch_log (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity        TEXT NOT NULL DEFAULT '',
+  query         TEXT NOT NULL DEFAULT '',
+  reason        TEXT NOT NULL DEFAULT '',
+  hit_count     INTEGER NOT NULL DEFAULT 0,
+  status        TEXT NOT NULL DEFAULT 'ok',
+  source_event  TEXT NOT NULL DEFAULT '',
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_autoresearch_created ON autoresearch_log(created_at DESC);
 """
 
 
@@ -306,3 +320,53 @@ def stats(conn: sqlite3.Connection) -> dict:
     row = conn.execute(
         "SELECT COUNT(*) AS n, MAX(fetched_at) AS latest FROM knowledge_docs").fetchone()
     return {"count": row["n"] or 0, "latest": row["latest"] or ""}
+
+
+# --------------------------------------------------------------------------
+# 自主查询审计日志（F5）：只在独立库，记录她自己发现缺口去查的每一次
+# --------------------------------------------------------------------------
+
+def log_autoresearch(conn: sqlite3.Connection, *, entity: str = "", query: str = "",
+                     reason: str = "", hit_count: int = 0, status: str = "ok",
+                     source_event: str = "") -> int:
+    """写一条自主查询审计。返回日志 id。任何异常都不外抛（审计不能挡住对话）。"""
+    try:
+        cur = conn.execute(
+            "INSERT INTO autoresearch_log"
+            "(entity,query,reason,hit_count,status,source_event,created_at) "
+            "VALUES(?,?,?,?,?,?,?)",
+            (str(entity)[:60], str(query)[:120], str(reason)[:120],
+             int(hit_count or 0), str(status)[:24], str(source_event)[:120],
+             _iso_now()))
+        conn.commit()
+        return int(cur.lastrowid or 0)
+    except sqlite3.Error:
+        return 0
+
+
+def list_autoresearch(conn: sqlite3.Connection, limit: int = 30) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id,entity,query,reason,hit_count,status,source_event,created_at "
+        "FROM autoresearch_log ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def autoresearch_count_since(conn: sqlite3.Connection, iso_ts: str) -> int:
+    """某时间点以来的自主查询次数（频次上限用）。字符串比较 ISO 时间即可。"""
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM autoresearch_log WHERE created_at >= ?",
+            (iso_ts,)).fetchone()
+        return int(row["n"] or 0)
+    except sqlite3.Error:
+        return 0
+
+
+def autoresearch_last_at(conn: sqlite3.Connection) -> str:
+    """最近一次自主查询时间（间隔闸门用），没有返回空串。"""
+    try:
+        row = conn.execute(
+            "SELECT created_at FROM autoresearch_log ORDER BY id DESC LIMIT 1").fetchone()
+        return str(row["created_at"] or "") if row else ""
+    except sqlite3.Error:
+        return ""

@@ -199,6 +199,19 @@
         <button type="submit">查</button>
       </form>
       <p class="knowledge-status" id="knowledgeStatus" hidden></p>
+
+      <div class="auto-block" id="autoBlock">
+        <div class="auto-block__head">
+          <span class="auto-block__title">她自己去查</span>
+          <label class="auto-block__switch">
+            <input type="checkbox" id="autoToggle">
+            <span id="autoToggleLabel">开启</span>
+          </label>
+        </div>
+        <p class="auto-block__meta" id="autoStatusLine">正在读取状态…</p>
+        <div class="auto-log" id="autoLog" hidden></div>
+      </div>
+
       <div class="knowledge-list" id="knowledgeList"></div>
       <p class="knowledge-hint">这里的每条都带来源网址和抓取时间。她记得你说的话，是另一套，不在这里。</p>
     </div>

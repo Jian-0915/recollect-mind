@@ -110,6 +110,10 @@
   // 「她知道了什么」面板：列出最近收录的外部知识 / 按关键词检索。
   const knowledge    = (limit) => get('/api/knowledge?limit=' + (limit || 30));
   const knowledgeFind = (q, limit) => get('/api/knowledge/search?q=' + encodeURIComponent(q || '') + '&limit=' + (limit || 8));
+  // F5 自主获取：状态 / 审计日志 / 开关（她自己发现缺口去查的留痕）
+  const autoStatus = () => get('/api/autoresearch/status');
+  const autoLog    = (limit) => get('/api/autoresearch/log?limit=' + (limit || 30));
+  const autoToggle = (enabled) => post('/api/autoresearch/toggle', { enabled: !!enabled });
 
   /* ==================== MCP 服务管理（通用，可填密钥/自建服务） ==================== */
   // 列出服务（密钥掩码）+ 当前启用 id。
@@ -151,6 +155,7 @@
     ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
     settings, settingsSave, models,
     research, knowledge, knowledgeFind,
+    autoStatus, autoLog, autoToggle,
     mcpServers, mcpSave, mcpTest, mcpActive,
     meta, notify, notifyReply, openWeb
   };

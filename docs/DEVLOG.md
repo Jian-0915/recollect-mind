@@ -1245,6 +1245,29 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
 
+## v36：她自己去查（F5 自主外部获取闭环，2026-11-18）
+
+### 为什么这么做
+
+F5 是 ROADMAP 自进化组最后一项。用户诉求："聊了乌江寨她能自己查、下次聊更聪明"，但要防住两个坑：① 变打扰（和之前"程序化主动关心"同源）；② 把网上的话当用户亲口说的（事实穿帮）。所以设计成"对话后异步发现 + 多重闸门 + 独立审计 + 来源明确标注的反哺"。
+
+### 设计取舍
+
+- **触发挂对话主链路，不做常驻轮询**：`live.turn()` 成功后调 `observe()`，用守护线程执行，主回复零等待。比单独起定时器更省、更贴合"因为这句话才查"的因果。
+- **预筛放在执行器内部，不放 observe**：曾为省开销在 observe 里先开连接 discover 再 close，结果注入的共享连接被提前关掉（测试里表现为 `Cannot operate on a closed database`）。去掉预筛，让 `_run_once` 自己开自己关、自己判空——连接所有权清晰。
+- **闸门四道**：config 总开关 + 运行期开关（`set_enabled`，前端即时关）+ 静默时段 + 每日上限/最小间隔（读 `autoresearch_log` 计数）。一次只查一个实体，避免一句话触发一串联网。
+- **反哺 prompt 的措辞是关键**：`build_knowledge_block` 开头写死"你自己查到的资料（不是对方说过的，别当成他的记忆）"，每条带 URL。查不到返回空串，`build_prompt(knowledge_block="")` 保证旧提示词一字不差——存量 76 项 agent/brain/factkey 测试全过验证了这点。
+- **审计只写独立库**：`autoresearch_log` 建在 `knowledge.db`，主库 events 40→40、无此表，物理隔离守住。
+
+### 踩坑
+
+- 时区坑又出现（`test_proactive` v35 也踩过）：`datetime(...,15:00,utc).astimezone(+8)` 是北京 23:00，正好踩静默门。闸门测试统一改用 UTC 07:00 = 北京 15:00，且日志时间直接插固定值，不依赖系统当前时刻——测试与跑测时间无关。
+- 注入共享 sqlite 连接时，`_run_once` 的 finally `close()` 会关掉测试还要读的库；用 no-close 代理解决（生产逻辑自己开自己关是对的，不动）。
+
+### 验证
+
+F5 针对性 20 项全过（发现/去重/闸门各分支/执行器/路由/prompt 注入）；agent/brain/factkey 76 项、live 14 项全过。端到端（假 provider 不联网）：发现乌江寨→联网存 1 条→审计留痕→下次对话注入知识块→重复提及不再查。主库 events 40→40。前端 `node --check` 通过。
+
 ## v35：搜索服务自己配（通用 MCP 管理器，2026-11-18）
 
 ### 为什么改
