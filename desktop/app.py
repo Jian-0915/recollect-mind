@@ -74,7 +74,20 @@ class _DesktopAuth:
             if "nm_session=" not in cookie:
                 headers["cookie"] = (cookie + "; " if cookie else "") + \
                     f"nm_session={self.token}"
-        await self.app(scope, receive, send)
+
+        # 桌面端静态资源禁止缓存：WebView2 会强缓存 js/css，改了前端不生效，
+        # 用户得手动清缓存或重装。加 no-cache 后每次启动都拉最新文件。
+        path = scope.get("path", "") if scope["type"] == "http" else ""
+        if path.startswith("/desk/"):
+            async def _send(message):
+                if message["type"] == "http.response.start":
+                    h = MutableHeaders(scope=message)
+                    h["cache-control"] = "no-cache, no-store, must-revalidate"
+                    h["pragma"] = "no-cache"
+                await send(message)
+            await self.app(scope, receive, _send)
+        else:
+            await self.app(scope, receive, send)
 
 
 def _build_server(port):
