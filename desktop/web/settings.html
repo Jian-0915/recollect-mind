@@ -71,6 +71,14 @@
         <span class="index__meta">5 项</span>
         <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
       </a>
+      <a class="index__row" href="#/audio">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6h4l5 4V5L8 9H4z"></path><path d="M16.5 8.5a5 5 0 0 1 0 7"></path></svg>
+        </span>
+        <span class="index__name">语音播放</span>
+        <span class="index__meta">音色 · 语速</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
       <a class="index__row" href="#/relation">
         <span class="index__icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.3-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.7-7 9-7 9z"></path></svg>
@@ -211,6 +219,55 @@
                 <label class="field__label" for="f-avoid">避免</label>
                 <textarea class="textarea" id="f-avoid" name="avoid" rows="3">说教、“加油”“你可以的”、连续追问、替我做决定。</textarea>
                 <p class="field__hint">把讨厌的说法直接写进来，比描述“温柔一点”更有效。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 语音播放（设备偏好，独立于人设版本） -->
+        <section class="detail__section" data-section="audio">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">语音播放</h3>
+              <span class="group__meta">本机偏好 · 不进人设版本</span>
+            </div>
+            <p class="group__intro">设置她的声音。这里改的是朗读声音，不影响她写字的方式；只在这台电脑上生效。</p>
+            <div class="group__fields">
+              <div class="field">
+                <div class="field__head">
+                  <label class="field__label" for="tts-voice">音色</label>
+                  <span class="field__note">5 个内置音色</span>
+                </div>
+                <select class="input" id="tts-voice">
+                  <option value="vivian">vivian · 温柔女声</option>
+                  <option value="serena">serena · 清亮女声</option>
+                  <option value="uncle_fu">uncle_fu · 沉稳男声</option>
+                  <option value="dylan">dylan · 京腔男声</option>
+                  <option value="eric">eric · 川腔男声</option>
+                </select>
+                <p class="field__hint">选完点下面的「试听一句」听听看。语气是她写的，声音只是念出来。</p>
+              </div>
+
+              <div class="field">
+                <div class="field__head">
+                  <label class="field__label" for="tts-rate">语速</label>
+                  <output class="field__note" id="ttsRateOut" for="tts-rate">正常</output>
+                </div>
+                <input class="range" type="range" id="tts-rate" min="0.7" max="1.4" step="0.05" value="1">
+                <p class="field__hint">只调播放快慢，不改她说了什么。太慢会显得拖，太快听不清。</p>
+              </div>
+
+              <div class="field">
+                <div class="field__head">
+                  <label class="field__label" for="tts-volume">音量</label>
+                  <output class="field__note" id="ttsVolumeOut" for="tts-volume">80%</output>
+                </div>
+                <input class="range" type="range" id="tts-volume" min="0" max="1" step="0.05" value="0.8">
+              </div>
+
+              <div class="field">
+                <button class="btn btn--ghost btn--sm" type="button" id="ttsTryBtn">试听一句</button>
+                <p class="field__hint" id="ttsTryHint">合成约需几秒，请稍等。</p>
               </div>
             </div>
           </div>

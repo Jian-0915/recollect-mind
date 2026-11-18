@@ -239,6 +239,133 @@
      对话页
      ========================================================================== */
 
+
+
+/* ---------------- 语音播放（本地 TTS · 整段缓冲播放） ----------------
+   后端返回 24kHz 16bit 单声道 s16le。CPU 合成比实时慢（RTF~1.8），
+   边生成边播会断供卡顿，所以等整段收齐再一次性播放——多等一两秒，
+   换来连续不卡。语速用 playbackRate、音量用 GainNode，都在前端实现
+   （模型本身没有语速参数）。 */
+var TTS_RATE = 24000;
+var ttsPlayer = {
+  ctx: null,
+  gain: null,
+  source: null,
+  state: "idle",     // idle / preparing / playing
+  token: 0,          // 递增令牌：新播放/打断让旧请求的回调失效
+  onState: null,     // 由按钮注入状态回调
+  rate: 1.0,         // 语速，设置页写入
+  volume: 1.0,       // 音量，设置页写入
+
+  _ctx: function () {
+    if (!this.ctx) {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      this.ctx = new C({ sampleRate: TTS_RATE });
+      this.gain = this.ctx.createGain();
+      this.gain.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === "suspended") { try { this.ctx.resume(); } catch (e) {} }
+    this.gain.gain.value = this.volume;
+    return this.ctx;
+  },
+
+  _setState: function (s) {
+    this.state = s;
+    if (this.onState) this.onState(s);
+  },
+
+  stop: function () {
+    this.token++;                      // 让进行中的合成回调失效
+    if (this.source) {
+      try { this.source.onended = null; this.source.stop(); } catch (e) {}
+      try { this.source.disconnect(); } catch (e) {}
+      this.source = null;
+    }
+    if (this.state !== "idle") this._setState("idle");
+  },
+
+  /* 整段 s16le → AudioBuffer，一次排播。 */
+  _play: function (buf, token) {
+    if (token !== this.token) return;
+    var ctx = this._ctx();
+    if (!ctx) throw { ok: false, error: "浏览器不支持 Web Audio" };
+    var n = Math.floor(buf.byteLength / 2);
+    if (!n) throw { ok: false, error: "语音数据是空的" };
+    var pcm = new Int16Array(buf, 0, n);
+    var audio = ctx.createBuffer(1, n, TTS_RATE);
+    var ch = audio.getChannelData(0);
+    for (var i = 0; i < n; i++) ch[i] = pcm[i] / 32768;
+    var src = ctx.createBufferSource();
+    src.buffer = audio;
+    src.playbackRate.value = this.rate;
+    src.connect(this.gain);
+    var self = this;
+    src.onended = function () {
+      if (token === self.token) { self.source = null; self._setState("idle"); }
+    };
+    src.start();
+    this.source = src;
+    this._setState("playing");
+  },
+
+  /* 合成并播放整句。onState(state) 回调 idle/preparing/playing。 */
+  speak: function (text, voice, onState) {
+    var self = this;
+    this.stop();                       // 点新的一句先停掉旧的
+    this.onState = onState || null;
+    var token = this.token;
+    if (!window.DeskAPI || !DeskAPI.ttsSpeakBuffered) return Promise.resolve(false);
+    this._setState("preparing");       // 合成中：按钮显示"准备中"，不假装已在播
+    return DeskAPI.ttsSpeakBuffered(text, voice).then(function (buf) {
+      if (token !== self.token) return false;
+      self._play(buf, token);
+      return true;
+    }).catch(function (e) {
+      if (token !== self.token) return false;
+      self._setState("idle");
+      var msg = (e && e.error) || "语音不可用";
+      if (toast) toast(msg);
+      return false;
+    });
+  }
+};
+
+/* 语音偏好（音色/语速/音量）独立存 localStorage，不进人设版本系统——
+   这是设备播放偏好，不是人格，改它不该产生人设新版本。两页共用同一份。 */
+var TTS_PREFS_KEY = "ache.tts";
+function getTtsPrefs() {
+  var d = { voice: "vivian", rate: 1.0, volume: 1.0 };
+  try {
+    var saved = JSON.parse(localStorage.getItem(TTS_PREFS_KEY) || "{}");
+    if (saved && typeof saved === "object") {
+      if (saved.voice) d.voice = saved.voice;
+      if (typeof saved.rate === "number") d.rate = saved.rate;
+      if (typeof saved.volume === "number") d.volume = saved.volume;
+    }
+  } catch (e) {}
+  return d;
+}
+function setTtsPrefs(p) {
+  try { localStorage.setItem(TTS_PREFS_KEY, JSON.stringify(p)); } catch (e) {}
+}
+
+// 服务是否可用：模型齐全才显示按钮；未就绪先按需拉起。缓存结果，避免每条气泡都查。
+var ttsReadyChecked = false;
+var ttsAvailable = false;
+function ensureTtsAvailable() {
+  if (ttsReadyChecked) return Promise.resolve(ttsAvailable);
+  ttsReadyChecked = true;
+  if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false);
+  return DeskAPI.ttsStatus().then(function (s) {
+    ttsAvailable = !!(s && s.available);
+    return ttsAvailable;
+  }).catch(function () { ttsAvailable = false; return false; });
+}
+
+// 用户开口（发送新消息）时打断正在念的语音
+function stopSpeaking() { ttsPlayer.stop(); }
+
   function initChat() {
     var chat = $("#chat");
     var stream = $("#stream");
@@ -283,132 +410,6 @@
       toEnd();
     }
 
-    /* ---------------- 语音播放（本地 TTS · 流式 PCM） ----------------
-       后端 /api/tts 返回 24kHz 16bit 单声道 s16le 流。Web Audio 不能像
-       <audio> 那样直接喂裸 PCM，所以按块转成 AudioBuffer 排到时间轴上：
-       块到达就调度，nextAt 累加，块间不断流。停止时断开并重置，可再点重播。 */
-    var TTS_RATE = 24000;
-    var ttsPlayer = {
-      ctx: null,
-      sources: [],
-      nextAt: 0,
-      playing: false,
-      token: 0,          // 递增令牌：新播放/打断让旧流的回调失效
-      onState: null,     // 由按钮注入状态回调
-
-      _ctx: function () {
-        if (!this.ctx) {
-          var C = window.AudioContext || window.webkitAudioContext;
-          if (!C) return null;
-          this.ctx = new C({ sampleRate: TTS_RATE });
-        }
-        if (this.ctx.state === "suspended") { try { this.ctx.resume(); } catch (e) {} }
-        return this.ctx;
-      },
-
-      /* 把 s16le 字节块转成 AudioBuffer 并排到 nextAt 之后播放。
-         不足一个样本的尾字节留到下一块，避免跨块错位产生杂音。 */
-      _feed: function (bytes, token, tail) {
-        if (token !== this.token || !bytes.length) return;
-        var ctx = this._ctx();
-        if (!ctx) return;
-        var all = tail ? concat(tail, bytes) : bytes;
-        var n = Math.floor(all.length / 2);
-        var carry = all.subarray(n * 2);
-        var pcm = new Int16Array(n);
-        var dv = new DataView(all.buffer, all.byteOffset, n * 2);
-        for (var i = 0; i < n; i++) pcm[i] = dv.getInt16(i * 2, true);
-        var buf = ctx.createBuffer(1, n, TTS_RATE);
-        var ch = buf.getChannelData(0);
-        for (var j = 0; j < n; j++) ch[j] = pcm[j] / 32768;
-        var src = ctx.createBufferSource();
-        src.buffer = buf;
-        src.connect(ctx.destination);
-        var startAt = Math.max(ctx.currentTime, this.nextAt);
-        src.start(startAt);
-        this.nextAt = startAt + buf.duration;
-        this.sources.push(src);
-        this._tail = carry;
-      },
-
-      stop: function () {
-        this.token++;
-        var self = this;
-        this.sources.forEach(function (s) { try { s.stop(); } catch (e) {} try { s.disconnect(); } catch (e) {} });
-        this.sources = [];
-        this.nextAt = 0;
-        this._tail = null;
-        if (this.playing) { this.playing = false; if (self.onState) self.onState(false); }
-      },
-
-      /* 合成并播放整句。返回 Promise<boolean>：是否成功开始（false=不可用/失败）。 */
-      speak: function (text, voice, onState) {
-        var self = this;
-        this.stop();                       // 点新的一句先停掉旧的
-        this.onState = onState || null;
-        var token = this.token;
-        this._tail = null;
-        if (!window.DeskAPI || !DeskAPI.ttsSpeak) return Promise.resolve(false);
-        return DeskAPI.ttsSpeak(text, voice).then(function (res) {
-          if (!res.body || !res.body.getReader) throw { ok: false, error: "浏览器不支持流式播放" };
-          var ctx = self._ctx();
-          if (!ctx) throw { ok: false, error: "浏览器不支持 Web Audio" };
-          self.nextAt = ctx.currentTime + 0.03;   // 留一点调度余量
-          self.playing = true;
-          if (self.onState) self.onState(true);
-          var reader = res.body.getReader();
-          function pump() {
-            return reader.read().then(function (r) {
-              if (token !== self.token) { try { reader.cancel(); } catch (e) {} return; }
-              if (r.done) {
-                if (token === self.token && self.playing) {
-                  // 最后不足样本的尾字节补零念完
-                  if (self._tail && self._tail.length >= 2) self._feed(self._tail, token, null);
-                  self.playing = false;
-                  if (self.onState) self.onState(false);
-                }
-                return;
-              }
-              self._feed(r.value, token, self._tail);
-              return pump();
-            });
-          }
-          pump().catch(function () {
-            if (token === self.token) { self.playing = false; if (self.onState) self.onState(false); }
-          });
-          return true;
-        }).catch(function (e) {
-          self.playing = false;
-          if (self.onState) self.onState(false);
-          var msg = (e && e.error) || "语音不可用";
-          if (toast) toast(msg);
-          return false;
-        });
-      }
-    };
-
-    function concat(a, b) {
-      var out = new Uint8Array(a.length + b.length);
-      out.set(a, 0); out.set(b, a.length);
-      return out;
-    }
-
-    // 服务是否可用：模型齐全才显示按钮；未就绪先按需拉起。缓存结果，避免每条气泡都查。
-    var ttsReadyChecked = false;
-    var ttsAvailable = false;
-    function ensureTtsAvailable() {
-      if (ttsReadyChecked) return Promise.resolve(ttsAvailable);
-      ttsReadyChecked = true;
-      if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false);
-      return DeskAPI.ttsStatus().then(function (s) {
-        ttsAvailable = !!(s && s.available);
-        return ttsAvailable;
-      }).catch(function () { ttsAvailable = false; return false; });
-    }
-
-    // 用户开口（发送新消息）时打断正在念的语音
-    function stopSpeaking() { ttsPlayer.stop(); }
-
     function meMessage(text) {
       var article = document.createElement("article");
       article.className = "msg msg--me";
@@ -447,22 +448,30 @@
       speakBtn.hidden = true;
       speakBtn.setAttribute("aria-label", "念出来");
       speakBtn.title = "念出来";
-      function speakIcon(playing) {
-        // 喇叭 / 停止方块，纯 SVG，随状态切换
-        return playing
-          ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>'
-          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path></svg>';
+      function speakIcon(state) {
+        // 喇叭 / 转圈(准备中) / 停止方块，纯 SVG
+        if (state === "playing")
+          return '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
+        if (state === "preparing")
+          return '<svg class="speak-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9"></path></svg>';
+        return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path></svg>';
       }
-      speakBtn.innerHTML = speakIcon(false);
+      function setSpeakState(s) {
+        speakBtn.innerHTML = speakIcon(s);
+        speakBtn.classList.toggle("is-playing", s === "playing");
+        speakBtn.classList.toggle("is-preparing", s === "preparing");
+        var label = s === "playing" ? "停止" : (s === "preparing" ? "正在准备语音" : "念出来");
+        speakBtn.setAttribute("aria-label", label);
+        speakBtn.title = label;
+      }
+      setSpeakState("idle");
       speakBtn.addEventListener("click", function () {
-        if (ttsPlayer.playing) { ttsPlayer.stop(); return; }
+        if (ttsPlayer.state !== "idle") { ttsPlayer.stop(); return; }
         if (!ttsReadyChecked) { ensureTtsAvailable(); }
-        ttsPlayer.speak(text, "", function (playing) {
-          speakBtn.innerHTML = speakIcon(playing);
-          speakBtn.classList.toggle("is-playing", !!playing);
-          speakBtn.setAttribute("aria-label", playing ? "停止" : "念出来");
-          speakBtn.title = playing ? "停止" : "念出来";
-        });
+        var prefs = getTtsPrefs();
+        ttsPlayer.rate = prefs.rate;
+        ttsPlayer.volume = prefs.volume;
+        ttsPlayer.speak(text, prefs.voice, setSpeakState);
       });
       ensureTtsAvailable().then(function (ok) { if (ok) speakBtn.hidden = false; });
       body.appendChild(speakBtn);
@@ -929,6 +938,7 @@
     var GROUPS = {
       basic: { title: "基本", sub: "名字、身份和性格，是它每句话的底子。" },
       voice: { title: "说话方式", sub: "风格、长度、称呼与口头禅，决定它一句话怎么说。" },
+      audio: { title: "语音播放", sub: "音色、语速和音量——她开口念出来时的声音。" },
       relation: { title: "关系与相处", sub: "它多久找你一次、怎么关心你、什么绝对不做。" },
       examples: { title: "示范语气", sub: "两组对话，只学语气，不当真实经历。" },
       identity: { title: "固定身份宪法", sub: "优先级高于人设，冲突时以这里为准。" },
@@ -963,6 +973,80 @@
     var dirty = false;
     var routed = false;
     var lastSaved;
+
+    /* ---------- 语音播放偏好（独立保存，不进人设版本） ---------- */
+    function initTtsSettings() {
+      var voice = $("#tts-voice");
+      var rate = $("#tts-rate");
+      var volume = $("#tts-volume");
+      var rateOut = $("#ttsRateOut");
+      var volumeOut = $("#ttsVolumeOut");
+      var tryBtn = $("#ttsTryBtn");
+      var tryHint = $("#ttsTryHint");
+      if (!voice || !rate || !volume) return;
+
+      var prefs = getTtsPrefs();
+      voice.value = prefs.voice;
+      rate.value = prefs.rate;
+      volume.value = prefs.volume;
+
+      function rateLabel(v) {
+        if (v < 0.85) return "偏慢";
+        if (v < 0.97) return "稍慢";
+        if (v <= 1.03) return "正常";
+        if (v <= 1.2) return "稍快";
+        return "偏快";
+      }
+      function syncOut() {
+        if (rateOut) rateOut.textContent = rateLabel(parseFloat(rate.value));
+        if (volumeOut) volumeOut.textContent = Math.round(parseFloat(volume.value) * 100) + "%";
+      }
+      function save() {
+        setTtsPrefs({
+          voice: voice.value,
+          rate: parseFloat(rate.value),
+          volume: parseFloat(volume.value)
+        });
+        ttsPlayer.rate = parseFloat(rate.value);
+        ttsPlayer.volume = parseFloat(volume.value);
+      }
+      [voice, rate, volume].forEach(function (el) {
+        el.addEventListener("change", function () { syncOut(); save(); });
+        el.addEventListener("input", syncOut);
+      });
+      syncOut();
+
+      if (tryBtn) {
+        tryBtn.addEventListener("click", function () {
+          if (ttsPlayer.state !== "idle") { ttsPlayer.stop(); return; }
+          if (!window.DeskAPI || !DeskAPI.ttsStatus) return;
+          DeskAPI.ttsStatus().then(function (s) {
+            if (s && s.ready) doTry();
+            else if (s && s.available) {
+              if (tryHint) tryHint.textContent = "正在启动语音服务，请稍等…";
+              return DeskAPI.ttsStart().then(function (r) {
+                if (r && r.ok) doTry();
+                else if (tryHint) tryHint.textContent = (r && r.error) || "语音服务没起来";
+              });
+            } else if (tryHint) tryHint.textContent = (s && s.reason) || "语音不可用";
+          }).catch(function () {
+            if (tryHint) tryHint.textContent = "语音服务连不上";
+          });
+        });
+      }
+      function doTry() {
+        if (tryHint) tryHint.textContent = "正在合成，请稍等…";
+        save();
+        var pre = getTtsPrefs();
+        ttsPlayer.rate = pre.rate;
+        ttsPlayer.volume = pre.volume;
+        if (tryBtn) tryBtn.textContent = "停止试听";
+        ttsPlayer.speak("你好，我是" + (localStorage.getItem("ache.name") || "她") + "。这是我在说话。", pre.voice, function (state) {
+          if (state === "idle" && tryBtn) tryBtn.textContent = "试听一句";
+          if (state === "playing" && tryHint) tryHint.textContent = "正在播放，再点按钮可以停。";
+        });
+      }
+    }
 
     var RANGE_LABELS = {
       "1": "1 · 很克制",
@@ -1019,7 +1103,8 @@
     function getState() {
       var texts = {};
       $$("input.input, textarea.textarea, input.range", detailPane).forEach(function (el) {
-        if (el.id && el.id !== "traitInput") texts[el.id] = el.value;
+        // traitInput 是临时输入框；tts-* 是设备偏好，都不属于人设卡，不能混进保存状态
+        if (el.id && el.id !== "traitInput" && el.id.indexOf("tts-") !== 0) texts[el.id] = el.value;
       });
       var radios = {};
       $$('input[type="radio"]', detailPane).forEach(function (el) {
@@ -1809,6 +1894,7 @@
     lastSaved = getState();
 
     loadPersona();
+    initTtsSettings();
 
     // 关窗/离开对话页时停掉语音，不让声音留在后台
     window.addEventListener("pagehide", function () { stopSpeaking(); });

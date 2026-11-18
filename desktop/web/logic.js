@@ -85,6 +85,12 @@
     }
     return res; // 调用方负责读流并播放
   }
+  // 收齐整段 PCM 再交回（ArrayBuffer）。CPU 合成比实时慢（RTF~1.8），边生成
+  // 边播会断音卡顿；一次性拿到全段再播虽然多等一两秒，但播放是连续的。
+  async function ttsSpeakBuffered(text, voice) {
+    const res = await ttsSpeak(text, voice);
+    return res.arrayBuffer();
+  }
 
   /* ==================== 桌面壳能力 ==================== */
   const meta = () => get('/api/desktop/meta');
@@ -109,7 +115,7 @@
     proactive, proactiveStat,
     persona, personaTpl, personaPreview, personaSave, personaHistory, personaRollback,
     identity, identityHist, identitySave,
-    ttsStatus, ttsStart, ttsSpeak,
+    ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered,
     settings, settingsSave, models,
     meta, notify, openWeb
   };

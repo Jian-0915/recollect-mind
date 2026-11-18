@@ -130,6 +130,12 @@
   border-color: var(--accent, var(--ink-3));
   background: var(--accent-soft, transparent);
 }
+.speak-btn.is-preparing { color: var(--ink-3); border-style: dashed; }
+.speak-btn .speak-spin { width: 14px; height: 14px; animation: speak-spin 1s linear infinite; }
+@keyframes speak-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .speak-btn .speak-spin { animation-duration: 2.4s; }
+}
 
 /* 记忆回执 */
 
