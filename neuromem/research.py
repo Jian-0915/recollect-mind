@@ -56,6 +56,54 @@ _ANSWER_PROMPT = """你是用户的记忆陪伴助手。用户提到了一个新
 用户说的：{text}
 """
 
+# F5 自主查询专用：把查到的资料整理成「她自己跑去查、回来随口说一句」的口吻。
+# 和用户主动问的 _ANSWER_PROMPT 分开——那种是「你问我答」，这种是「我自己好奇查的」。
+_DISCOVERY_PROMPT = """你是用户的记忆陪伴助手。刚才对话里提到「{entity}」，你自己好奇就去查了一下。
+
+请用一句自然的话把你查到的告诉对方，像朋友突然想起什么、随口分享那样。
+
+严格规则：
+1. 用第一人称「我」——是你自己去查的，不是用户在问你。
+2. 只说资料里有的事实；资料没说清楚就别硬编，宁可说「还没太弄明白」。
+3. 短，一到两句，60 字以内；口语化，不要书面报告腔、不要 markdown。
+4. 不要编造 URL、日期、数字；不要出现「根据资料」「查询结果显示」这类字眼。
+
+你查到的资料：
+{evidence}
+"""
+
+
+def summarize_discovery(entity: str, hits, *, generate_fn=None) -> str:
+    """F5 用：把检索命中整理成一句她的口吻的话。模型不可用则退回资料首句。
+
+    hits 为 KnowledgeHit 列表。任何异常都降级，绝不让自主查询失败。
+    """
+    if not hits:
+        return ""
+    evidence = "\n\n".join(h.as_prompt(n) for n, h in enumerate(hits[:3], 1))
+    prompt = _DISCOVERY_PROMPT.format(entity=str(entity)[:40], evidence=evidence)
+    gen = generate_fn
+    if gen is None:
+        try:
+            from . import llm
+            gen = lambda p: llm.generate(
+                p, model=config.ANSWER_MODEL, max_tokens=200, timeout=45, think=False)
+        except Exception:
+            gen = None
+    if gen is not None:
+        try:
+            answer = (gen(prompt) or "").strip()
+            if answer:
+                return answer[:300]
+        except Exception:
+            pass
+    # 降级：直接摘第一条资料的标题+摘要，至少让用户看得见查到了什么
+    first = hits[0]
+    fallback = first.title
+    if first.snippet:
+        fallback += "：" + first.snippet[:80]
+    return fallback[:300]
+
 
 def research(text: str, *, kb_conn=None, private_terms=(), provider=None,
              generate_fn=None, llm_fn=None, force: bool = False,

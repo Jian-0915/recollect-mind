@@ -251,9 +251,9 @@ def build_knowledge_block(hits):
     if not hits:
         return ""
     lines = []
-    for i, h in enumerate(hits[:3], 1):
+    for i, h in enumerate(hits[:5], 1):
         title = str(getattr(h, "title", "") or "")[:60]
-        snippet = str(getattr(h, "snippet", "") or "")[:160]
+        snippet = str(getattr(h, "snippet", "") or "")[:200]
         url = str(getattr(h, "url", "") or "")[:100]
         if not (title or snippet):
             continue
@@ -305,20 +305,24 @@ def build_prompt(pack, user_text, history, counterpart="用户",
 
 
 def build_prompt_no_brain(identity_block, user_text, history, counterpart="用户",
-                          persona_block="", now=None):
+                          persona_block="", now=None, knowledge_block=""):
     """对照组：同一份 L0 + 最近原文，但没有候选记忆、情绪、关系与插件。
 
     v14：人设段自带宪法底线，设置后人设整体替代单独的 identity_block，
     保证 A/B 两边拿到完全相同的人格设定（公平对照的前提）。
     now 可注入当前时间（测试用）；None 时取本机时间。
+    knowledge_block 为 F5 自主查来的资料；不传则提示词与旧版一字不差。
     """
-    return "\n\n".join([
+    parts = [
         NO_BRAIN_SYSTEM,
         _now_block(now),
         persona_block or identity_block or "（固定身份未设定）",
         "【最近对话原文】\n" + _history_text(history),
-        "【%s本轮说】%s" % (counterpart, user_text),
-    ])
+    ]
+    if knowledge_block:
+        parts.append(knowledge_block)
+    parts.append("【%s本轮说】%s" % (counterpart, user_text))
+    return "\n\n".join(parts)
 
 
 def build_repair_prompt(prompt, reason=""):

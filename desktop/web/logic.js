@@ -33,6 +33,10 @@
   const proactive     = () => get('/api/proactive');
   const proactiveStat = () => get('/api/proactive/status');
 
+  /* ==================== 她自己查到的知识（播报） ==================== */
+  // GET 即消费：取一条已由模型整理好的知识短句，聊天页显示成一条消息。
+  const autoBrief = () => get('/api/autoresearch/brief');
+
   /* ==================== Agent 人设（L0，人工版本化） ==================== */
   const persona      = () => get('/api/persona');                       // 当前人设 + identity + 校验
   const personaTpl   = (example) => get('/api/persona/template?example=' + (example ? 'true' : 'false'));
@@ -159,7 +163,7 @@
     ttsPrefs, ttsPrefsSave,
     settings, settingsSave, models,
     research, knowledge, knowledgeFind,
-    autoStatus, autoLog, autoToggle,
+    autoStatus, autoLog, autoToggle, autoBrief,
     mcpServers, mcpSave, mcpTest, mcpActive,
     meta, notify, notifyReply, openWeb
   };

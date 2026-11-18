@@ -37,12 +37,13 @@ def test_discover_respects_private_terms(kb):
     assert all("微微" not in x["entity"] for x in found)
 
 
-def test_gate_quiet_hours(kb, monkeypatch):
+def test_gate_no_quiet_hours(kb, monkeypatch):
+    """2026-11-19：取消静默——后台查询不打扰对话，深夜也照查。"""
     monkeypatch.setattr(config, "AUTORESEARCH", True)
-    quiet = datetime(2026, 11, 18, 15, 30, tzinfo=timezone.utc).astimezone(
+    night = datetime(2026, 11, 18, 15, 30, tzinfo=timezone.utc).astimezone(
         timezone(timedelta(hours=8)))  # 北京 23:30
-    ok, why = autoresearch.should_search(kb, now=quiet)
-    assert ok is False and "静默" in why
+    ok, why = autoresearch.should_search(kb, now=night)
+    assert ok is True and why == "可以查"
 
 
 def test_gate_daily_cap(kb, monkeypatch):

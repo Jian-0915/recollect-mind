@@ -1013,6 +1013,44 @@ function fireReplyNotice(text, voice) {
       }).catch(function () {});
     }
 
+    /* 她自己查到的知识：F5 后台查完、模型整理成一句话后写进队列，
+     * 这里轮询取回，显示成一条带「自己查的」标识和来源的气泡。
+     * GET 即消费——展示过就不再弹，但她说过的话留在聊天流里。 */
+    function pollKnowledgeBrief() {
+      if (!window.DeskAPI || document.hidden) return;
+      if (thinking && !thinking.hidden) return;    // 正在回话时先不插，避免打断
+      DeskAPI.autoBrief().then(function (r) {
+        if (!r || !r.available || !r.text) return;
+        var card = himMessage(r.text, "");
+        var body = card.querySelector(".msg__body");
+        var tag = document.createElement("div");
+        tag.className = "msg__selfnote";
+        tag.textContent = "✨ 她自己查到的" + (r.entity ? " · " + r.entity : "");
+        if (body) body.insertBefore(tag, body.firstChild);
+        var sources = (r.sources || []).slice(0, 3);
+        if (sources.length && body) {
+          var box = document.createElement("div");
+          box.className = "msg__sources";
+          sources.forEach(function (s, n) {
+            var a = document.createElement("a");
+            a.className = "msg__source";
+            a.textContent = "[" + (n + 1) + "] " + (s.title || "来源");
+            a.href = s.url || "#";
+            a.title = s.url || "";
+            a.addEventListener("click", function (event) {
+              event.preventDefault();
+              if (s.url) { try { window.open(s.url, "_blank"); } catch (e) {} }
+            });
+            box.appendChild(a);
+          });
+          body.appendChild(box);
+        }
+        if (empty) empty.hidden = true;
+        insert(card);
+        toEnd();
+      }).catch(function () {});
+    }
+
     var ppClose = $("#ppClose");
     if (ppClose) ppClose.addEventListener("click", hidePopup);
 
@@ -1149,6 +1187,10 @@ function fireReplyNotice(text, voice) {
     // 首次延后 10 秒，别和回填历史抢启动；之后每 60 秒问一次
     window.setTimeout(pollProactive, 10000);
     window.setInterval(pollProactive, 60000);
+
+    // 她自己查到的知识：查完尽快显示，首次 15 秒、之后每 20 秒问一次。
+    window.setTimeout(pollKnowledgeBrief, 15000);
+    window.setInterval(pollKnowledgeBrief, 20000);
 
     // 设置页改音色后，按新音色重新预热所有历史气泡：
     // 跨标签页/页面走 storage 事件；同页（本窗口跳设置再返回）用 focus 兜底。

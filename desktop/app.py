@@ -424,6 +424,26 @@ def _build_server(port):
             if c is not None:
                 c.close()
 
+    @api_app.get("/api/autoresearch/brief")
+    def _desk_autoresearch_brief():
+        """知识播报：取一条她自己查到、模型整理好的短句。GET 即消费。"""
+        from neuromem import knowledge as kmod
+        c = None
+        try:
+            c = kmod.connect()
+            item = kmod.peek_brief(c)
+            if not item:
+                return {"ok": True, "available": False}
+            return {"ok": True, "available": True, "text": item.get("text", ""),
+                    "entity": item.get("entity", ""), "sources": item.get("sources", []),
+                    "created_at": item.get("created_at", "")}
+        except Exception as e:
+            return {"ok": False, "available": False,
+                    "error": "%s: %s" % (type(e).__name__, str(e)[:200])}
+        finally:
+            if c is not None:
+                c.close()
+
     @api_app.post("/api/autoresearch/toggle")
     async def _desk_autoresearch_toggle(request: Request):
         from neuromem import autoresearch as ar

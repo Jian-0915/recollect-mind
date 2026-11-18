@@ -37,16 +37,15 @@ def _knowledge_block_for(text):
     try:
         from neuromem import intent as _intent, knowledge as _knowledge
         entities = _intent.extract_entities(text)
-        if not entities:
+        # 2026-11-19：即使没抽出专名，也用整句去召回——用户常用描述性说法
+        # （「上次那个古镇」）指代已查过的东西，旧版直接返回空串会漏掉。
+        if not entities and not (text or "").strip():
             return ""
         conn = _knowledge.connect()
         try:
-            hits = []
-            for e in entities[:2]:          # 最多 2 个实体，避免 prompt 膨胀
-                for h in _knowledge.search(conn, e, top_k=2):
-                    if all(h.url != seen.url for seen in hits):
-                        hits.append(h)
-            return prompts.build_knowledge_block(hits[:3])
+            # 整句 + 各实体多路召回，去重提权，最多 5 条进 prompt。
+            hits = _knowledge.recall(conn, text, entities, top_k=5)
+            return prompts.build_knowledge_block(hits)
         finally:
             conn.close()
     except Exception:
@@ -785,7 +784,7 @@ class CompanionAgent:
                   if self.brain else
                   prompts.build_prompt_no_brain(
                       self.identity_block, text, self.history, self.counterpart,
-                      self.persona_block))
+                      self.persona_block, knowledge_block=_kb_block))
         # 「我上一句说什么」答案唯一：把原话钉进提示词，模型不许再自己挑。
         if _is_last_utterance_query(text):
             _lu = _last_user_utterance(self.history, self.counterpart)

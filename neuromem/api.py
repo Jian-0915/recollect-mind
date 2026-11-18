@@ -771,6 +771,29 @@ def autoresearch_log(limit: int = 30):
             c.close()
 
 
+@app.get("/api/autoresearch/brief")
+def autoresearch_brief():
+    """取一条她自己查到、已用模型整理好的知识短句。GET 即消费（标记 delivered）。
+
+    没有待播报的返回 available=False，前端据此决定不显示，绝不打扰。
+    """
+    c = None
+    try:
+        c = knowledge.connect()
+        item = knowledge.peek_brief(c)
+        if not item:
+            return {"ok": True, "available": False}
+        return {"ok": True, "available": True, "text": item.get("text", ""),
+                "entity": item.get("entity", ""), "sources": item.get("sources", []),
+                "created_at": item.get("created_at", "")}
+    except Exception as exc:
+        return {"ok": False, "available": False,
+                "error": "%s: %s" % (type(exc).__name__, str(exc)[:200])}
+    finally:
+        if c is not None:
+            c.close()
+
+
 @app.post("/api/autoresearch/toggle")
 def autoresearch_toggle(p: dict):
     """开/关自主查询（进程内生效，重启回 config 默认）。"""

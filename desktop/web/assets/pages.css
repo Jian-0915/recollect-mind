@@ -1635,6 +1635,18 @@
 
 .msg__source:hover { border-color: var(--clay-400); }
 
+/* 她自己查到的知识：气泡顶部的小标识，和「你问我答」区分开 */
+.msg__selfnote {
+  display: inline-block;
+  margin-bottom: 5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--clay-400) 16%, transparent);
+  color: var(--clay-700);
+  font-size: var(--fs-10);
+  letter-spacing: .02em;
+}
+
 /* 查证按钮：与「念出来」并列，用陶土色区分「这会联网」 */
 .research-btn { color: var(--clay-700); }
 .research-btn:hover { color: var(--clay-800); border-color: var(--clay-400); }

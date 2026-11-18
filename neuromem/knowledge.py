@@ -53,6 +53,19 @@ CREATE TABLE IF NOT EXISTS autoresearch_log (
   created_at    TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_autoresearch_created ON autoresearch_log(created_at DESC);
+
+-- 知识播报队列：F5 查到资料后，用对话模型整理成一句自然的话写这里，
+-- 前端聊天页轮询取走、显示成「她自己查到的」一条消息。展示即消费。
+-- 只存独立库：播报只是知识的一种呈现，绝不写主库 events/concepts。
+CREATE TABLE IF NOT EXISTS discovery_brief (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity      TEXT NOT NULL DEFAULT '',
+  text        TEXT NOT NULL DEFAULT '',
+  sources     TEXT NOT NULL DEFAULT '[]',   -- JSON: [{title,url}]
+  delivered   INTEGER NOT NULL DEFAULT 0,
+  created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_brief_created ON discovery_brief(created_at DESC);
 """
 
 
@@ -292,6 +305,34 @@ def search(conn: sqlite3.Connection, query: str, top_k: int = 5,
     return hits
 
 
+def recall(conn: sqlite3.Connection, text: str, entities=(), top_k: int = 5) -> list[KnowledgeHit]:
+    """多路召回：整句 + 每个实体分别检索，按评分融合去重。
+
+    对话时用它判断「她自己查过的知识里，有没有和这句相关的」。整句能抓到
+    描述性表达（「上次那个古镇」），实体能抓到专名（「乌江寨」），两路互补。
+    只读独立库、零网络——vector 不传，不会触发 embed。
+    """
+    queries: list[str] = []
+    whole = (text or "").strip()
+    if whole:
+        queries.append(whole)
+    for e in (entities or ()):
+        e = str(e).strip()
+        if len(e) >= 2 and e not in queries:
+            queries.append(e)
+    fused: dict[int, KnowledgeHit] = {}
+    for q in queries[:6]:                    # 最多 6 路，防 prompt/CPU 膨胀
+        for h in search(conn, q, top_k=max(top_k, 3)):
+            prev = fused.get(h.id)
+            # 命中多路说明更相关，累加分数提权；保留信息最全的一条
+            if prev is None:
+                fused[h.id] = h
+            else:
+                prev.score = round(prev.score + h.score, 5)
+    scored = sorted(fused.values(), key=lambda h: h.score, reverse=True)
+    return scored[:top_k]
+
+
 def _cos(a, b) -> float:
     if not a or not b or len(a) != len(b):
         return 0.0
@@ -370,3 +411,58 @@ def autoresearch_last_at(conn: sqlite3.Connection) -> str:
         return str(row["created_at"] or "") if row else ""
     except sqlite3.Error:
         return ""
+
+
+# --------------------------------------------------------------------------
+# 知识播报队列：F5 查到 → 模型整理 → 写这里 → 前端聊天页取走显示
+# --------------------------------------------------------------------------
+
+def add_brief(conn: sqlite3.Connection, *, entity: str = "", text: str = "",
+              sources=None) -> int:
+    """写一条待播报的知识短句。sources 为 [{title,url,...}]，存 JSON。返回 id。"""
+    import json
+    text = str(text or "").strip()
+    if not text:
+        return 0
+    try:
+        cur = conn.execute(
+            "INSERT INTO discovery_brief(entity,text,sources,delivered,created_at) "
+            "VALUES(?,?,?,0,?)",
+            (str(entity)[:60], text[:600],
+             json.dumps(sources or [], ensure_ascii=False)[:4000], _iso_now()))
+        conn.commit()
+        return int(cur.lastrowid or 0)
+    except sqlite3.Error:
+        return 0
+
+
+def peek_brief(conn: sqlite3.Connection) -> dict | None:
+    """取一条未播报的知识短句（只标记 delivered，不删除，留审计）。无则 None。"""
+    try:
+        row = conn.execute(
+            "SELECT id,entity,text,sources,created_at FROM discovery_brief "
+            "WHERE delivered=0 ORDER BY id ASC LIMIT 1").fetchone()
+        if not row:
+            return None
+        conn.execute("UPDATE discovery_brief SET delivered=1 WHERE id=?", (row["id"],))
+        conn.commit()
+        out = dict(row)
+        try:
+            import json
+            out["sources"] = json.loads(out.get("sources") or "[]")
+        except Exception:
+            out["sources"] = []
+        out["created_at"] = out.get("created_at") or ""
+        return out
+    except sqlite3.Error:
+        return None
+
+
+def brief_stats(conn: sqlite3.Connection) -> dict:
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, SUM(CASE WHEN delivered=0 THEN 1 ELSE 0 END) AS pending "
+            "FROM discovery_brief").fetchone()
+        return {"total": int(row["n"] or 0), "pending": int(row["pending"] or 0)}
+    except sqlite3.Error:
+        return {"total": 0, "pending": 0}

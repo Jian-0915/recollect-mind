@@ -1,8 +1,9 @@
 """F5：她自己发现缺口、主动去查外部信息。
 
 设计红线（对应 ROADMAP F5 验收）：
-  - 不打扰：只在对话里出现「有意义的未知实体」时才动，没有明确实体不查；
-    静默时段不查；每天有上限、两次之间有最小间隔。
+  - 需求驱动：只在对话里出现「有意义的未知实体」时才动，没有明确实体不查。
+    这是异步后台行为——不弹窗、不占对话、不打断用户，所以 2026-11-19 起
+    取消静默时段，每日上限与间隔只作防抖/防配额打爆，不再当防打扰闸门。
   - 可一键关：NEUROMEM_AUTORESEARCH=0 或 runtime_off() 立刻停。
   - 脱敏：只拿抽出来的实体词去查，绝不把整段私聊发出去。
   - 可审计：每次自主查询写独立知识库的 autoresearch_log（何时/为何/查了什么）。
@@ -79,14 +80,16 @@ def discover(text: str, kb_conn, private_terms=()) -> list[dict]:
 
 
 def should_search(kb_conn, now: datetime | None = None) -> tuple[bool, str]:
-    """触发闸：开关 / 静默 / 每日上限 / 最小间隔。返回 (可否, 原因)。"""
+    """触发闸：开关 / 每日上限 / 最小间隔。返回 (可否, 原因)。
+
+    2026-11-19：已移除静默时段闸门。后台查询不弹窗、不占对话、不打断用户，
+    没有任何理由在深夜停摆——用户明确要求需求驱动、全天候。
+    """
     if not config.AUTORESEARCH:
         return False, "自主查询已关闭"
     if _runtime_off.is_set():
         return False, "自主查询已关闭（本次运行）"
     now = now or _now()
-    if _quiet(now):
-        return False, "静默时段不查"
     try:
         # 每日上限：过去 24 小时的审计条数
         since = (now - timedelta(days=1)).isoformat()
@@ -122,18 +125,25 @@ def status(kb_conn=None) -> dict:
             "gap_min": config.AUTORESEARCH_GAP_MIN,
             "today_count": knowledge.autoresearch_count_since(conn, since),
             "last_at": knowledge.autoresearch_last_at(conn),
+            "brief": knowledge.brief_stats(conn),
         }
     except Exception:
         return {"enabled": enabled(), "daily_cap": config.AUTORESEARCH_DAILY,
                 "gap_min": config.AUTORESEARCH_GAP_MIN,
-                "today_count": 0, "last_at": ""}
+                "today_count": 0, "last_at": "",
+                "brief": {"total": 0, "pending": 0}}
     finally:
         if own and conn is not None:
             conn.close()
 
 
-def _run_once(text: str, private_terms, source_event: str, provider=None):
-    """后台真正执行的一次自主查询。任何异常都吞掉并写审计，绝不影响对话。"""
+def _run_once(text: str, private_terms, source_event: str, provider=None,
+              generate_fn=None):
+    """后台真正执行的一次自主查询。任何异常都吞掉并写审计，绝不影响对话。
+
+    需求驱动：一轮对话里发现几个未知实体就查几个（受每日上限约束），
+    查到的资料用对话模型整理成一句她口吻的话，写进播报队列供聊天页显示。
+    """
     conn = None
     try:
         from . import research as _research
@@ -144,18 +154,39 @@ def _run_once(text: str, private_terms, source_event: str, provider=None):
         ok, why = should_search(conn)
         if not ok:
             return None
-        # 一次只查一个最相关的实体（多条实体分次查，受频次上限约束）
-        cand = candidates[0]
-        entity = cand["entity"]
-        result = _research.research(
-            entity, kb_conn=conn, private_terms=private_terms, provider=provider,
-            max_results=3, generate_fn=lambda p: "")  # 自主查询不需要生成回答，只要存资料
-        hit = len(result.sources)
-        knowledge.log_autoresearch(
-            conn, entity=entity, query=result.query or entity,
-            reason=cand["reason"], hit_count=hit,
-            status="ok" if hit else "empty", source_event=source_event)
-        return {"entity": entity, "hits": hit}
+        # 需求驱动：把本轮发现的全部候选都查一遍，不再只查第一个。
+        # should_search 的每日上限按「轮」粗放；这里再按「条」精确兜底，
+        # 防止一句话里塞十几个实体一次性打爆 API 配额。
+        since = (_now() - timedelta(days=1)).isoformat()
+        used = knowledge.autoresearch_count_since(conn, since)
+        room = max(0, int(config.AUTORESEARCH_DAILY) - used)
+        limit = min(config.AUTORESEARCH_PER_TURN_MAX, room)
+        results = []
+        for cand in candidates[:limit]:
+            entity = cand["entity"]
+            try:
+                result = _research.research(
+                    entity, kb_conn=conn, private_terms=private_terms,
+                    provider=provider, max_results=3, force=True)
+                hit = len(result.sources)
+                knowledge.log_autoresearch(
+                    conn, entity=entity, query=result.query or entity,
+                    reason=cand["reason"], hit_count=hit,
+                    status="ok" if hit else "empty", source_event=source_event)
+                if hit:
+                    # 用模型把资料整理成一句她口吻的话 → 播报队列（不写主库）
+                    brief = _research.summarize_discovery(
+                        entity, result.sources, generate_fn=generate_fn)
+                    if brief:
+                        knowledge.add_brief(
+                            conn, entity=entity, text=brief,
+                            sources=[{"title": s.title, "url": s.url}
+                                     for s in result.sources[:3]])
+                results.append({"entity": entity, "hits": hit})
+            except Exception:
+                # 单个实体失败不影响其它实体，也不影响对话
+                continue
+        return results[0] if results else None
     except Exception:
         return None
     finally:
@@ -167,7 +198,7 @@ def _run_once(text: str, private_terms, source_event: str, provider=None):
 
 
 def observe(text: str, private_terms=(), source_event: str = "", provider=None,
-            *, sync: bool = False):
+            generate_fn=None, *, sync: bool = False):
     """对话后调用：发现缺口→过闸→后台查→存库+审计。不阻塞、不抛出异常。
 
     sync=True 时同步执行（仅测试用），返回执行结果；正常走守护线程返回 None。
@@ -178,14 +209,14 @@ def observe(text: str, private_terms=(), source_event: str = "", provider=None,
     # 曾在这里做预筛并 close 共享连接，导致注入的连接被提前关掉——去掉。
     if sync:
         with _exec_lock:
-            return _run_once(text, private_terms, source_event, provider)
+            return _run_once(text, private_terms, source_event, provider, generate_fn)
 
     def _worker():
         # 拿不到锁就跳过这轮（上一轮还在查），不排队堆积
         if not _exec_lock.acquire(blocking=False):
             return
         try:
-            _run_once(text, private_terms, source_event, provider)
+            _run_once(text, private_terms, source_event, provider, generate_fn)
         finally:
             _exec_lock.release()
 
