@@ -9,16 +9,41 @@
 """
 import time
 
+import pytest
+
 import desktop.app as da
+
+
+@pytest.fixture(autouse=True)
+def _restore_notify_state():
+    """每个用例前后还原模块级状态，避免测试间互相污染。"""
+    saved_ref = dict(da._WINDOW_REF)
+    saved_broken = notify._broken
+    yield
+    da._WINDOW_REF.clear()
+    da._WINDOW_REF.update(saved_ref)
+    notify._broken = saved_broken
 import desktop.notify as notify
 
 
 def test_send_falls_back_when_toast_missing(monkeypatch):
     """没装 win11toast（或非 Windows）时降级气球，不抛异常。"""
     calls = []
-    monkeypatch.setattr(notify, "_toast", None)
+
+    def no_toast():
+        raise ImportError("no win11toast")
+
+    monkeypatch.setattr(notify, "_load_toast", no_toast)
     monkeypatch.setattr(notify, "_balloon", lambda t, m: calls.append((t, m)) or False)
-    assert notify.send("阿澈", "在吗") is False
+    notify._broken = False
+    # send 立即返回 True 表示已投递；降级在守护线程内发生
+    assert notify.send("阿澈", "在吗") is True
+    # 等守护线程真正跑完降级分支（_broken 被置 True），避免线程跨用例污染
+    for _ in range(100):
+        if notify._broken:
+            break
+        time.sleep(0.02)
+    assert notify._broken is True
     assert calls == [("阿澈", "在吗")]
 
 
@@ -30,7 +55,9 @@ def test_send_registers_click_callback(monkeypatch):
         got["title"], got["body"] = title, body
         kwargs["on_click"]({"arguments": ""})   # 模拟用户点击
 
-    monkeypatch.setattr(notify, "_toast", fake_toast)
+    # _load_toast 是无参加载器，返回发送函数
+    monkeypatch.setattr(notify, "_load_toast", lambda: fake_toast)
+    notify._broken = False
     clicked = []
     assert notify.send("阿澈", "我在这儿", lambda: clicked.append(1)) is True
     for _ in range(50):
@@ -56,7 +83,34 @@ def test_notify_reply_wires_focus_callback(monkeypatch):
     assert sent["title"] == "阿澈"
     assert sent["message"] == "今天过得怎么样"
     assert callable(sent["on_click"])
-    assert sent["on_click"].__func__ == api._focus_chat.__func__
+    assert sent["on_click"] == api._focus_chat
+
+
+def test_js_api_has_no_recursive_attributes():
+    """回归锁：js_api 实例不能含会被 pywebview dir() 递归展开的复杂属性。
+
+    v31 曾把 webview.Window 塞进 api.window，pywebview 反射时无限递归
+    （pty.Empty.Empty... → RecursionError），窗口卡死在「未响应」。
+    这里复刻 pywebview 的 get_functions 展开规则：不可调用 + 带 __module__
+    的对象会被递归——桥接实例上绝不能出现这种属性。
+    """
+    import inspect
+
+    api = da._Api(18778)
+    for name in dir(api):
+        if name.startswith("_"):
+            continue
+        attr = getattr(api, name)
+        if inspect.ismethod(attr) or inspect.isfunction(attr):
+            continue
+        # pywebview 会对下面这类属性递归展开，桥接对象上不允许存在
+        assert not (not callable(attr) and hasattr(attr, "__module__")), \
+            f"js_api 属性 {name} 会被 pywebview 递归展开，导致窗口未响应"
+
+    # 窗口引用必须放在模块级，且不在实例 __dict__ 里
+    assert "window" not in api.__dict__
+    assert "chat_url" not in api.__dict__
+    assert "window" in da._WINDOW_REF
 
 
 def test_focus_chat_no_window_is_safe():
@@ -87,7 +141,8 @@ def test_focus_chat_on_chat_page_only_focuses():
             self.calls.append("load:" + url)
 
     w = Win()
-    api.window = w
+    da._WINDOW_REF["window"] = w
+    da._WINDOW_REF["chat_url"] = "http://127.0.0.1:18778/desk/index.html"
     api._focus_chat()
     assert "restore" in w.calls and "show" in w.calls
     assert not any(c.startswith("load:") for c in w.calls)
@@ -115,7 +170,8 @@ def test_focus_chat_from_other_page_loads_chat():
             self.calls.append("load:" + url)
 
     w = Win()
-    api.window = w
+    da._WINDOW_REF["window"] = w
+    da._WINDOW_REF["chat_url"] = "http://127.0.0.1:18778/desk/index.html"
     api._focus_chat()
     assert any(c.startswith("load:") and "index.html?from=notify" in c
                for c in w.calls)

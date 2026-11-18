@@ -56,6 +56,12 @@ def _find_free_port(preferred=PORT):
 
 _WEB_LOGIN_TOKEN = {"value": ""}
 
+# 系统通知点击回跳用的窗口引用。必须放在**模块级**而绝不能塞进 _Api 实例：
+# pywebview 对 js_api 做 dir() 递归反射，任何不可调用且带 __module__ 的属性
+# （如 webview.Window 实例）都会被无限展开，导致窗口卡死在「未响应」。
+# 模块级私有变量不在实例上，桥接反射看不到，回调时再从这里取。
+_WINDOW_REF = {"window": None, "chat_url": ""}
+
 
 class _DesktopAuth:
     """给所有请求注入合法 Cookie，桌面窗口免登录。
@@ -335,8 +341,9 @@ class _Api:
     """暴露给前端 JS 的桥接方法（pywebview js_api）。"""
 
     def __init__(self, port=None):
-        self.window = None
-        self._chat_url = f"http://{HOST}:{port or PORT}/desk/index.html"
+        # 不在这里存 window / chat_url 等任何复杂对象属性——pywebview 会
+        # dir() 递归反射整个实例，见模块级 _WINDOW_REF 的说明。
+        pass
 
     def notify(self, title, message):
         """系统通知（主动关心等场景）：可点击，点了回到聊天页。"""
@@ -352,9 +359,14 @@ class _Api:
         from desktop import notify
         notify.send(title or TITLE, message or "", self._focus_chat)
 
-    def _focus_chat(self):
-        """系统通知被点击：恢复窗口并回到聊天页，聚焦输入框。"""
-        w = self.window
+    @staticmethod
+    def _focus_chat():
+        """系统通知被点击：恢复窗口并回到聊天页，聚焦输入框。
+
+        静态方法 + 模块级窗口引用：既不把 Window 暴露给 js_api 反射，
+        又能让 notify 的回调在任意线程安全拿到窗口。
+        """
+        w = _WINDOW_REF["window"]
         if w is None:
             return
         try:
@@ -365,6 +377,7 @@ class _Api:
             w.show()
         except Exception:
             pass
+        chat_url = _WINDOW_REF["chat_url"]
         try:
             # 已在聊天页：只把光标放回输入框、滚到底，不重载页面（保住草稿）。
             on_chat = w.evaluate_js(
@@ -379,10 +392,10 @@ class _Api:
                     "if(c){c.scrollTop=c.scrollHeight;}"
                 )
             else:
-                w.load_url(self._chat_url + "?from=notify")
+                w.load_url(chat_url + "?from=notify")
         except Exception:
             try:
-                w.load_url(self._chat_url + "?from=notify")
+                w.load_url(chat_url + "?from=notify")
             except Exception:
                 pass
 
@@ -455,8 +468,11 @@ def main():
         background_color="#1a1a1a",
         confirm_close=False,
     )
-    # 通知点击要能操作窗口：把窗口句柄交给桥接对象（create_window 之后才有）。
-    api.window = window
+    # 通知点击要能操作窗口：写进模块级引用，**绝不**挂到 api 实例上。
+    # pywebview 对 js_api 做 dir() 递归反射，Window 实例带 __module__ 会被
+    # 无限展开（pty.Empty.Empty... → RecursionError → 窗口卡在未响应）。
+    _WINDOW_REF["window"] = window
+    _WINDOW_REF["chat_url"] = f"http://{HOST}:{port}/desk/index.html"
     # 关窗后停服务、回收 TTS 子进程、退出进程
     def _on_closed():
         try:

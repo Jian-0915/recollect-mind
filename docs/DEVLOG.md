@@ -1245,6 +1245,25 @@ if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API
 
 新增 `tests/unit/test_notify.py`（7 项）：无 Toast 降级、`on_click` 回调透传、`notify_reply` 接上回跳回调、无窗口安全、聊天页只聚焦不重载、其它页跳回聊天页、供给 JS 含语音门闩。全量单测 **473 passed**。
 
+## v32：桌面端启动「未响应」热修（2026-11-18）
+
+### 现象与定位
+
+用户反馈"现在打不开了，一直提示未响应"，控制台刷 `pty.Empty.Empty... maximum recursion depth exceeded`。v31 刚把通知点击回跳接上，唯一新增的"复杂对象持有"就是把 `webview.Window` 实例挂到了 js_api 对象上（`api.window = window`）。
+
+pywebview 6.x 的 `util.get_functions` 会对 js_api 做 `dir()` 递归反射：不可调用、且带 `__module__` 的属性会被继续展开。`Window` 实例正好符合，反射时无限递归 → RecursionError → UI 消息队列卡死。窗口不是"没启动"，是启动后被反射拖死。
+
+### 修法
+
+1. **窗口引用移出 js_api**：`desktop/app.py` 新增模块级 `_WINDOW_REF = {"window": None, "chat_url": ""}`，`main()` 里写这里；`_Api` 的 `__init__` 什么都不存，`_focus_chat()` 改成 `@staticmethod` 从模块级引用取。回调照样能操作窗口，但桥接反射看不到 Window。
+2. **通知 import 也搬走**：排查时发现第二个隐患——`win11toast` 的顶层 import 会加载整套 WinRT/COM，pywebview 的 js_api 回调跑在 UI 线程，同步 import 同样会堵住窗口消息队列。`desktop/notify.py` 改为 `_load_toast()` 惰性加载，import + COM 初始化 + `toast()` 等待全在 `nm-toast` 守护线程；`send()` 立即返回。失败一次置 `_broken`，之后永久走气球降级，避免反复重 import。
+
+### 验证与教训
+
+- 回归锁：`test_js_api_has_no_recursive_attributes()` 复刻 pywebview 展开规则扫描桥接实例，杜绝同类回归；原 7 项通知用例改走 `_WINDOW_REF` / `_load_toast` 注入点，全量单测 exit=0（515 项收集）。
+- 实测：本地启动桌面端持续响应，无递归报错；用户本人复测确认没问题。
+- 教训：**js_api 是反射暴露面，不是普通 Python 对象**——任何不可调用的复杂属性（尤其 GUI/窗口/会话对象）都可能被 pywebview 递归展开。要传引用就用模块级私有容器 + 静态方法，不要在实例上挂对象。同理，UI 线程的回调里绝不要做重 import / COM 初始化 / 阻塞等待。
+
 ## 服务管理
 ```bash
 python service.py start      # 后台启动，轮询 /api/health 确认就绪
