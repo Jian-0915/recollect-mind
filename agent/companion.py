@@ -20,6 +20,7 @@ from collections import deque
 from pathlib import Path
 
 from neuromem import config, db, identity, llm, persona_card
+from neuromem import motivation as nm_motivation
 from neuromem import store as nm_store
 from neuromem.brain import Brain
 
@@ -167,6 +168,81 @@ def clean_reply(text):
     s = re.sub(r"```[a-z]*|```", "", s)
     s = re.sub(r"\s{2,}", " ", s).strip()
     return s.strip('"').strip()
+
+
+# 冷战期兜底：模型不照「只说五个字」的时候，替它把话说短。
+# 两组分开是为了别串味——极冷是敷衍，松动是还端着但能接话。
+_SULK_COLD = ("嗯。", "哦。", "随你。", "行吧。")
+_SULK_TEPID = ("随你怎么想。", "我没什么好说的。", "你忙你的。", "嗯，我听着。")
+_SENT_RE = re.compile(r"[^。！？!?…\n]+[。！？!?…]*")
+# 「知道啦，……」这种短开场白，重复上一轮就是在敷衍了事
+_OPEN_RE = re.compile(r"^([^，。！？,.!?]{1,6})[，,]\s*")
+
+
+def _drop_repeat_open(reply, prev):
+    """上一轮已经用这个开头了，就别再拿它垫一句。
+
+    冷战期的话本来就短，连着两轮「知道啦」听起来不是生气，是根本没看
+    对方说什么。只删开头那一小截，剩下的照说。
+    """
+    s = str(reply or "").strip()
+    p = str(prev or "").strip()
+    if not s or not p:
+        return s
+    m = _OPEN_RE.match(s)
+    if not m:
+        return s
+    head = m.group(1).strip()
+    if len(head) < 2 or not p.startswith(head):
+        return s
+    rest = s[m.end():].strip()
+    return rest if len(rest) >= 4 else s
+
+
+def _avoid_repeat(reply, history, tone=0.0):
+    """实在说不出新的，也别一字不差地重复上一句。
+
+    普通闲聊有一次重试纠偏（build_repeat_prompt），但冷战/被戳时的短句
+    重试往往还是同一句——搜索空间就那么点。实测连着两轮都是「行，那我不
+    吵你了。」，第二遍读起来就像它根本没听。这时候宁可换一句。
+    """
+    seen = {_norm(x) for x in _recent_agent_replies(history, 3)}
+    if not reply or _norm(reply) not in seen or tone <= 0.15:
+        return reply
+    for cand in (_SULK_COLD if tone >= 0.7 else _SULK_TEPID) + _SULK_TEPID:
+        if _norm(cand) not in seen:
+            return cand
+    return reply
+
+
+def shape_sulk(reply, temper, prev="", allow_q=False):
+    """按脸色把回复裁到该有的长度和语气。
+
+    只靠提示词约束不住：模型被要求「只回五个字」，实测照样写一整句完整的话，
+    读起来像客服在赌气。所以出口再按温度裁：冷就只留第一句，太长就换兜底句。
+    allow_q：冷战期问句等于主动往下聊，要挡；被顶了一句时反问是自然的，放行。
+    """
+    t = float(temper or 0)
+    s = str(reply or "").strip()
+    if not s or t <= 0.15:
+        return s
+    s = _drop_repeat_open(s, prev)
+    if t >= 0.4:
+        sents = [x.strip() for x in _SENT_RE.findall(s) if x.strip()]
+        if sents:
+            s = sents[0]
+    has_q = ("？" in s) or ("?" in s)
+    if t >= 0.7:
+        s = (s.replace("！", "。").replace("!", "。")
+              .replace("～", "").replace("~", ""))
+        if len(s) > 14 or (has_q and not allow_q):
+            s = _SULK_COLD[len(s) % len(_SULK_COLD)]
+    elif t >= 0.4:
+        if len(s) > 26 or (has_q and not allow_q):
+            s = _SULK_TEPID[len(s) % len(_SULK_TEPID)]
+    elif len(s) > 36:
+        s = _SULK_TEPID[len(s) % len(_SULK_TEPID)]
+    return s
 
 
 # 模型偶尔不按 JSON 输出，把「提示词里的格式要求」或「对方的问题」原样吐回来。
@@ -662,8 +738,22 @@ class CompanionAgent:
             for c in ((pack or {}).get("candidates") or [])
         ]
         guard_on = bool(self.brain and FACT_GUARD)
+        # 冷战期：先问一句「现在什么脸色」，再决定这轮话该多短、多刺。
+        # 记账（轮数 / 哄的程度）在这一步完成，所以同一轮里 temperature 是稳定的。
+        sulk_ctx = None
+        provoke = 0.0
+        if self.brain:
+            try:
+                sulk_ctx = nm_motivation.chat_state(self.brain.conn, text)
+                # 没在冷战，但对方这轮可能在试我会不会介意（「我要冷落你」）。
+                # 冷战优先：气还没消的时候，先按脸色说话，别叠加别的情绪。
+                if not (sulk_ctx or {}).get("active"):
+                    provoke = nm_motivation.provoked(text)
+            except Exception:
+                sulk_ctx, provoke = None, 0.0
         prompt = (prompts.build_prompt(pack, text, self.history, self.counterpart,
-                                       fact_guard=guard_on)
+                                       fact_guard=guard_on, sulk=sulk_ctx,
+                                       provoke=provoke)
                   if self.brain else
                   prompts.build_prompt_no_brain(
                       self.identity_block, text, self.history, self.counterpart,
@@ -727,6 +817,15 @@ class CompanionAgent:
                 fact_violation = True
                 reply, claims, fact_rewritten, fact_trimmed = self._converge(
                     reply, out, pack, used, text, bad, claims_missing, ctx)
+
+        # 冷战期最后一道手：模型不照长度来时，出口按脸色裁。
+        # 必须放在事实收敛之后——converge 会把话重写回正常长度。
+        tone = ((sulk_ctx or {}).get("temper") or 0.0
+                if (sulk_ctx or {}).get("active") else (provoke or 0.0))
+        if tone > 0.15:
+            reply = shape_sulk(reply, tone, prev=_last_agent_reply(self.history),
+                               allow_q=not (sulk_ctx or {}).get("active"))
+        reply = _avoid_repeat(reply, self.history, tone)
 
         facts = (normalize_remember(out.get("remember"), reply, text)
                  if self.brain else [])
@@ -797,6 +896,8 @@ class CompanionAgent:
             "mood_top": snap.get("top_label") or "", "hints": (pack.get("hints") or []) if pack else [],
             "module_notes": (pack.get("module_notes") or {}) if pack else {},
             "initiate": (pack.get("initiate") or {}) if pack else {},
+            "sulk": (sulk_ctx or {}) if sulk_ctx else {},
+            "provoke": provoke or 0.0,
             "commit": {k: v for k, v in commit.items() if k != "affect"},
             "elapsed_ms": int((time.time() - t0) * 1000),
             "raw_head": str(raw or "")[:200],

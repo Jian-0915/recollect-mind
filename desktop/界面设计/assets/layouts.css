@@ -1,0 +1,588 @@
+/* ==========================================================================
+   阿澈 · 对话页三种版式
+   同一份 DOM，通过 <html data-layout="air|letter|quiet"> 切换疏密与结构
+   依赖 tokens.css / ui.css / pages.css，需最后加载
+   ========================================================================== */
+
+/* 极简版专用的“记忆摘要”行，其余版式隐藏 */
+.memory-summary {
+  display: none;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 16px 2px 0;
+  color: var(--ink-3);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.memory-summary svg {
+  width: 11px;
+  height: 11px;
+  margin-top: 2px;
+  color: var(--clay-400);
+}
+
+/* ==========================================================================
+   A. 舒展 —— 保留气泡与印章，但把描边、头像、时间线全部减重
+   ========================================================================== */
+
+[data-layout="air"] .chat__inner {
+  padding: 10px 22px 18px;
+}
+
+[data-layout="air"] .msg {
+  margin-top: 24px;
+}
+
+[data-layout="air"] .msg .seal--xs {
+  border: 1px solid var(--clay-300);
+  background: transparent;
+  color: var(--clay-700);
+  box-shadow: none;
+  font-size: 11px;
+}
+
+[data-layout="air"] .bubble--him {
+  padding: 13px 16px;
+  border-color: var(--line);
+  font-size: 15px;
+  line-height: 1.86;
+}
+
+[data-layout="air"] .bubble--me {
+  max-width: 78%;
+  padding: 10px 14px;
+  border-color: transparent;
+}
+
+[data-layout="air"] .stamp {
+  margin-top: 30px;
+  font-family: var(--font-serif);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+}
+
+[data-layout="air"] .stamp:not(.stamp--first) {
+  display: none;
+}
+
+[data-layout="air"] .memory {
+  margin-top: 10px;
+}
+
+[data-layout="air"] .care {
+  padding: 14px 16px;
+  background: var(--care-bg);
+}
+
+[data-layout="air"] .composer {
+  padding-bottom: 16px;
+}
+
+[data-layout="air"] .composer__field {
+  padding: 8px 8px 8px 16px;
+  border-color: var(--line);
+  border-radius: 20px;
+  box-shadow: none;
+}
+
+[data-layout="air"] .composer__field:focus-within {
+  border-color: var(--clay-400);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+[data-layout="air"] .composer__meta {
+  justify-content: center;
+  margin-top: 9px;
+}
+
+[data-layout="air"] .empty__title {
+  font-size: 26px;
+}
+
+/* ==========================================================================
+   B. 信件 —— 去掉全部气泡：阿澈说话是正文，你说话是页边批注
+   ========================================================================== */
+
+[data-layout="letter"] .chat__inner {
+  padding: 8px 22px 18px;
+}
+
+[data-layout="letter"] .stamp {
+  display: none;
+}
+
+[data-layout="letter"] .msg {
+  margin-top: 26px;
+  gap: 0;
+}
+
+[data-layout="letter"] .msg .seal {
+  display: none;
+}
+
+[data-layout="letter"] .msg__body {
+  max-width: 100%;
+}
+
+[data-layout="letter"] .bubble--him {
+  padding: 2px 4px 2px 16px;
+  border: 0;
+  border-left: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: none;
+  font-size: 15px;
+  line-height: 1.92;
+}
+
+[data-layout="letter"] .bubble--me {
+  max-width: 86%;
+  padding: 2px 14px 2px 0;
+  border: 0;
+  border-right: 2px solid var(--clay-300);
+  border-radius: 0;
+  background: none;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.8;
+  text-align: right;
+}
+
+[data-layout="letter"] .memory {
+  padding-left: 16px;
+  font-size: 10.5px;
+}
+
+[data-layout="letter"] .thinking {
+  padding-left: 16px;
+}
+
+[data-layout="letter"] .thinking .seal {
+  display: none;
+}
+
+[data-layout="letter"] .care {
+  margin-top: 2px;
+  padding: 14px 16px;
+}
+
+[data-layout="letter"] .composer__field {
+  padding: 6px 2px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-layout="letter"] .composer__field:focus-within {
+  border-color: var(--clay-500);
+  box-shadow: none;
+}
+
+[data-layout="letter"] .send {
+  width: 34px;
+  height: 34px;
+  background: none;
+  color: var(--clay-700);
+}
+
+[data-layout="letter"] .send:not([disabled]):hover {
+  background: var(--clay-050);
+}
+
+[data-layout="letter"] .send[disabled] {
+  background: none;
+  color: var(--ink-3);
+}
+
+[data-layout="letter"] .composer__meta {
+  display: none;
+}
+
+[data-layout="letter"] .empty {
+  padding-top: 52px;
+}
+
+[data-layout="letter"] .empty__title {
+  font-size: 26px;
+}
+
+[data-layout="letter"] .empty__mark {
+  border-radius: 999px;
+  background: transparent;
+  box-shadow: none;
+}
+
+[data-layout="letter"] .suggestion {
+  padding: 0 2px 3px;
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  background: none;
+}
+
+[data-layout="letter"] .suggestion:hover {
+  border-bottom-color: var(--clay-400);
+  background: none;
+  color: var(--clay-700);
+}
+
+/* ==========================================================================
+   C. 极简 —— 收起头像、回执与时间线，只留对话本身
+   ========================================================================== */
+
+[data-layout="quiet"] .topbar {
+  min-height: 50px;
+  padding: 6px 12px;
+}
+
+[data-layout="quiet"] .identity__name {
+  font-size: 16px;
+}
+
+[data-layout="quiet"] .chat__inner {
+  padding: 2px 16px 10px;
+}
+
+[data-layout="quiet"] .stamp {
+  display: none;
+}
+
+[data-layout="quiet"] .msg {
+  margin-top: 14px;
+  gap: 0;
+}
+
+[data-layout="quiet"] .msg .seal {
+  display: none;
+}
+
+[data-layout="quiet"] .msg__body {
+  max-width: 100%;
+}
+
+[data-layout="quiet"] .bubble--him {
+  padding: 10px 13px;
+  border-radius: 14px 14px 14px 4px;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+[data-layout="quiet"] .bubble--me {
+  max-width: 80%;
+  padding: 9px 12px;
+  border-radius: 14px 14px 4px 14px;
+}
+
+[data-layout="quiet"] .memory {
+  display: none;
+}
+
+[data-layout="quiet"] .memory-summary {
+  display: flex;
+}
+
+[data-layout="quiet"] .thinking {
+  margin-top: 12px;
+}
+
+[data-layout="quiet"] .thinking .seal {
+  display: none;
+}
+
+[data-layout="quiet"] .care {
+  padding: 12px 13px;
+  border-radius: 14px 14px 14px 5px;
+}
+
+[data-layout="quiet"] .care__text {
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+[data-layout="quiet"] .care__actions {
+  margin-top: 10px;
+}
+
+[data-layout="quiet"] .composer {
+  padding-bottom: 10px;
+}
+
+[data-layout="quiet"] .composer__field {
+  padding: 4px 5px 4px 15px;
+  border-color: var(--line);
+  border-radius: 22px;
+  box-shadow: none;
+}
+
+[data-layout="quiet"] .composer__field:focus-within {
+  border-color: var(--clay-400);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
+[data-layout="quiet"] .composer__input {
+  max-height: 110px;
+}
+
+[data-layout="quiet"] .send {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+[data-layout="quiet"] .composer__meta {
+  display: none;
+}
+
+[data-layout="quiet"] .empty {
+  padding-top: 34px;
+}
+
+[data-layout="quiet"] .empty__mark {
+  display: none;
+}
+
+[data-layout="quiet"] .empty__title {
+  margin-top: 0;
+  font-size: 22px;
+}
+
+/* ==========================================================================
+   版式对照页
+   ========================================================================== */
+
+.options {
+  position: relative;
+  z-index: 1;
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 22px 18px 72px;
+}
+
+.options__head {
+  padding-bottom: 22px;
+  border-bottom: 1px solid var(--line);
+}
+
+.options__eyebrow {
+  color: var(--clay-700);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+}
+
+.options__title {
+  margin-top: 8px;
+  font-family: var(--font-serif);
+  font-size: 28px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+
+.options__lede {
+  max-width: 58ch;
+  margin-top: 10px;
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.85;
+}
+
+.options__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.option {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: var(--sh-1);
+}
+
+.option__preview {
+  display: flex;
+  flex-direction: column;
+  height: 300px;
+  overflow: hidden;
+  padding: 0 12px 8px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+
+.option__bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 -12px;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.option__name {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  letter-spacing: 0.02em;
+}
+
+.option__status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: 9.5px;
+}
+
+.option__status i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--moss-600);
+}
+
+.option__preview .stamp {
+  margin: 12px 0 0;
+}
+
+.option__preview .msg {
+  margin-top: 12px;
+}
+
+.option__preview .composer {
+  margin-top: auto;
+  padding: 6px 0 0;
+  background: transparent;
+}
+
+.option__preview .composer::before {
+  display: none;
+}
+
+.option__preview .composer__field {
+  padding: 4px 5px 4px 12px;
+}
+
+.option__preview .composer__input {
+  min-height: 22px;
+  font-size: 12px;
+}
+
+.option__ph {
+  color: var(--ink-3);
+}
+
+.option__preview .send {
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+}
+
+.option__preview .send svg {
+  width: 14px;
+  height: 14px;
+}
+
+.option__preview .bubble--him {
+  font-size: 13.5px;
+  line-height: 1.78;
+}
+
+.option__preview .bubble--me {
+  font-size: 12.5px;
+}
+
+.option__preview .memory {
+  font-size: 10px;
+}
+
+.option__preview .composer__input::placeholder {
+  color: var(--ink-3);
+}
+
+.option__body {
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px 16px;
+}
+
+.option__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.option__name-big {
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+}
+
+.option__desc {
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.option__specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0;
+}
+
+.option__specs li {
+  padding: 2px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  color: var(--ink-3);
+  font-size: 10px;
+}
+
+.option__body .btn {
+  justify-self: start;
+  margin-top: 2px;
+}
+
+.options__note {
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-14);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.8;
+}
+
+.options__note strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+@media (min-width: 860px) {
+  .options {
+    padding: 28px 24px 88px;
+  }
+
+  .options__grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .option__preview {
+    height: 320px;
+  }
+}
+
+/* 统一隐藏：
+   作者样式里的 display（.msg / .stamp / .memory-summary）会盖过 UA 的 [hidden]，
+   这里补一条作用域更窄的规则，放在最后保证优先级。 */
+.chat__inner [hidden] {
+  display: none;
+}

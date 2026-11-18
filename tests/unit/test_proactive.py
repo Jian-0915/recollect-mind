@@ -21,6 +21,52 @@ def _db(tmp_path):
     return c
 
 
+def test_self_directive_leak_is_blocked():
+    """用户截图里那条：模型把「该怎么说」当成了要发的话。"""
+    bad = "我需要自然地提起这个话题，语气轻柔，带着一点淡淡的哀愁，像是随手一提。"
+    assert proactive._unusable(bad)
+    assert proactive._unusable("我会用带点委屈的口吻问他去哪了。")
+    # 正常的话不能被误伤
+    assert not proactive._unusable("上次那个麻辣烫，后来怎么样了？")
+    assert not proactive._unusable("人呢，就这么没声了？")
+    assert not proactive._unusable("我需要你陪我说会儿话。")
+
+
+def test_self_directive_leak_is_blocked():
+    """用户截图里那条：模型把「该怎么说」当成了要发的话。"""
+    bad = "我需要自然地提起这个话题，语气轻柔，带着一点淡淡的哀愁，像是随手一提。"
+    assert proactive._unusable(bad)
+    assert proactive._unusable("我会用带点委屈的口吻问他去哪了。")
+    # 正常的话不能被误伤
+    assert not proactive._unusable("上次那个麻辣烫，后来怎么样了？")
+    assert not proactive._unusable("人呢，就这么没声了？")
+    assert not proactive._unusable("我需要你陪我说会儿话。")
+
+
+def test_compose_falls_back_when_model_explains_itself(tmp_path):
+    """整条出口链路：模型交代写法 → 重试仍交代 → 必须退回兜底，绝不弹给用户。"""
+    c = _db(tmp_path)
+    bad = "我需要自然地提起这个话题，语气轻柔，带着一点淡淡的哀愁，像是随手一提。"
+    text, ok = proactive.compose(c, {"kind": "missing", "topic": "麻辣烫"},
+                                  llm_fn=lambda p, **k: bad)
+    assert ok is False
+    assert "我需要" not in text and "语气" not in text
+    assert "麻辣烫" in text
+    c.close()
+
+
+def test_compose_falls_back_when_model_explains_itself(tmp_path):
+    """整条出口链路：模型交代写法 → 重试仍交代 → 必须退回兜底，绝不弹给用户。"""
+    c = _db(tmp_path)
+    bad = "我需要自然地提起这个话题，语气轻柔，带着一点淡淡的哀愁，像是随手一提。"
+    text, ok = proactive.compose(c, {"kind": "missing", "topic": "麻辣烫"},
+                                  llm_fn=lambda p, **k: bad)
+    assert ok is False
+    assert "我需要" not in text and "语气" not in text
+    assert "麻辣烫" in text
+    c.close()
+
+
 def test_fabrication_detector():
     assert proactive._fabrication("上次那个 IPA 你常喝哪款？我最近想换换口味。")
     assert proactive._fabrication("我还没泡过温泉呢，你去的是哪？")
@@ -38,7 +84,7 @@ def test_peek_empty_when_no_candidate(tmp_path):
     c.close()
 
 
-def test_tick_peek_consume_and_retire(tmp_path):
+def test_tick_peek_consume_and_cooldown(tmp_path):
     c = _db(tmp_path)
     proactive._ensure(c)
     c.execute("DELETE FROM proactive_suggestions")
@@ -59,12 +105,17 @@ def test_tick_peek_consume_and_retire(tmp_path):
     # 展示即消费：同一条不会被取两次
     assert proactive.peek(c, llm_fn=lambda p, **k: fixed)["available"] is False
 
-    # 提起过的话题（got["topic"]）从 open_topics 退场，避免下次又提同一件
+    # v16：提过不再立刻删掉（那等于忘事），而是进冷却；提两次没回应才放下
     topics = companion.state(c).get("open_topics") or []
-    assert not any(got["topic"] in t for t in topics)
-    # 另一个没提的话题还在
-    other = "章鱼" if "表哥" in got["topic"] else "表哥"
-    assert any(other in t for t in topics)
+    assert any(got["topic"] in t for t in topics), "提过一次仍该记得这件事"
+    row = c.execute("SELECT raised_at,raised_count FROM topic_state WHERE text=?",
+                    (got["topic"],)).fetchone()
+    assert row and row["raised_at"] and row["raised_count"] == 1
+
+    # 冷却期内不会换个说法再问同一件事
+    from neuromem import motivation
+    again = motivation.pick(c)
+    assert again["ok"] is False and ("冷却" in again["reason"] or "刚说过话" in again["reason"])
     c.close()
 
 
@@ -76,5 +127,7 @@ def test_fabrication_falls_back_to_plain(tmp_path):
     proactive.tick(c)
     got = proactive.peek(c, llm_fn=lambda p, **k: "上次那个 IPA，我最近也想换口味。")
     assert got["generated"] is False
-    assert "上次那个" in got["text"] and "我" not in got["text"]
+    # 兜底句有好几条（按心情随机取），但底线是：不冒充有经历，且确实提了那件事
+    assert "我最近" not in got["text"] and not proactive._fabrication(got["text"])
+    assert "章鱼小丸子" in got["text"], got["text"]
     c.close()

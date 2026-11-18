@@ -1,5 +1,7 @@
 # Recollect
 
+> Version history: [CHANGELOG.md](CHANGELOG.md) ｜ Design notes: [docs/DEVLOG.md](docs/DEVLOG.md)
+
 **Long-term memory for conversations that knows *whose* memory it is.**
 
 Most "AI memory" layers embed text chunks, retrieve the top-k by cosine similarity, and paste them into the prompt. That works until the conversation lasts more than a few sessions, because real dialogue breaks vector search in three specific ways:

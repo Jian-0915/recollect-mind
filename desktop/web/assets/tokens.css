@@ -1,0 +1,194 @@
+/* ==========================================================================
+   阿澈 · 设计令牌 Design Tokens  v1.0
+   美学立场「晨光纸页」：暖纸底 / 陶土强调 / 墨色文字 / 发丝线代替投影
+   所有颜色均按 WCAG AA 校验，对比度数值见 README.md
+   ========================================================================== */
+
+:root {
+  color-scheme: light;
+
+  /* ---------- 纸面层级 ---------- */
+  --bg: #f6f1e7;
+  --bg-deep: #efe8da;
+  --surface: #fffcf6;
+  --surface-2: #f3ecdf;
+  --surface-3: #ece3d3;
+  --line: #e7ddcc;
+  --line-strong: #d9ccb6;
+
+  /* ---------- 墨色文字 ---------- */
+  --ink: #2f2a23;        /* 12.6:1 on --bg */
+  --ink-2: #5b5145;      /* 6.9:1  on --bg */
+  --ink-3: #746a5e;      /* 4.7:1  on --bg */
+  --ink-inverse: #fffdf8;
+
+  /* ---------- 陶土主色 ---------- */
+  --clay-050: #fbf3ea;
+  --clay-100: #f6e6d8;
+  --clay-200: #eed4bf;
+  --clay-300: #ddb191;
+  --clay-400: #c98d67;
+  --clay-500: #b56f4a;
+  --clay-600: #9e4f2c;
+  --clay-700: #8a4626;   /* 6.2:1 on --bg，用于文字 */
+  --clay-800: #6f371d;
+
+  /* ---------- 语义色 ---------- */
+  --moss-100: #e8eee4;
+  --moss-500: #6f8a6a;
+  --moss-600: #4f6b53;
+  --moss-ring: rgba(79, 107, 83, 0.16);
+  --amber-100: #f7eeda;
+  --amber-line: #e8d7b4;
+  --amber-600: #87642a;
+  --rose-100: #f8e7e2;
+  --rose-line: #efd2cb;
+  --rose-600: #a0453b;
+  --rose-700: #8a3a31;
+
+  /* ---------- 交互映射 ---------- */
+  --focus: #9e4f2c;
+  --focus-ring: rgba(158, 79, 44, 0.16);
+  --btn-primary-bg: #9e4f2c;
+  --btn-primary-bg-hover: #8a4626;
+  --btn-primary-fg: #fffaf3;
+  --me-bubble: #efe3d1;
+  --me-bubble-line: #e2d3bc;
+  --him-bubble: #fffcf6;
+  --him-bubble-line: #e7ddcc;
+  --care-bg: #fbf1e4;
+  --care-bg-2: #f8ecdd;
+  --care-line: #ecd7c1;
+  --field-bg: #fbf7ee;
+  --field-bg-focus: #fffcf6;
+  --selection: rgba(181, 111, 74, 0.22);
+  --scrim: rgba(43, 32, 22, 0.34);
+  --grain-opacity: 0.055;
+  --grain-blend: multiply;
+
+  /* ---------- 排版 ---------- */
+  --font-sans: "Noto Sans SC", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei", system-ui, sans-serif;
+  --font-serif: "Noto Serif SC", "Source Han Serif SC", "Songti SC",
+    "SimSun", Georgia, serif;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas,
+    "Liberation Mono", monospace;
+
+  --fs-11: 11px;
+  --fs-12: 12px;
+  --fs-13: 13px;
+  --fs-14: 14px;
+  --fs-15: 15px;
+  --fs-17: 17px;
+  --fs-20: 20px;
+  --fs-24: 24px;
+  --fs-30: 30px;
+  --lh-tight: 1.4;
+  --lh-base: 1.62;
+  --lh-prose: 1.8;
+
+  /* ---------- 间距（4px 基准） ---------- */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --sp-6: 32px;
+  --sp-7: 48px;
+  --sp-8: 64px;
+
+  /* ---------- 圆角 ---------- */
+  --r-6: 6px;
+  --r-8: 8px;
+  --r-10: 10px;
+  --r-12: 12px;
+  --r-14: 14px;
+  --r-16: 16px;
+  --r-18: 18px;
+  --r-20: 20px;
+  --r-pill: 999px;
+
+  /* ---------- 阴影（克制：只在浮层与输入区用） ---------- */
+  --sh-1: 0 1px 2px rgba(74, 54, 36, 0.05), 0 2px 6px rgba(74, 54, 36, 0.03);
+  --sh-2: 0 6px 16px -8px rgba(74, 54, 36, 0.18), 0 2px 4px rgba(74, 54, 36, 0.04);
+  --sh-3: 0 18px 40px -18px rgba(58, 40, 26, 0.28), 0 4px 10px -6px rgba(58, 40, 26, 0.12);
+
+  /* ---------- 动效 ---------- */
+  --dur-1: 140ms;
+  --dur-2: 240ms;
+  --dur-3: 420ms;
+  --ease: cubic-bezier(0.22, 0.68, 0.28, 1);
+
+  /* ---------- 布局 ---------- */
+  --topbar-h: 58px;
+  --chat-max: 720px;
+  --content-max: 980px;
+  --tap: 44px;
+}
+
+/* ==========================================================================
+   暖夜主题（夜间自动或手动切换）
+   映射逻辑：背景→深墨，文字→暖米，主色→提亮陶土，语义色→低饱和高亮
+   ========================================================================== */
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a1714;
+  --bg-deep: #141110;
+  --surface: #231f1b;
+  --surface-2: #2b2622;
+  --surface-3: #342e28;
+  --line: #382f28;
+  --line-strong: #4a3f35;
+
+  --ink: #f2eade;
+  --ink-2: #c8bbaa;
+  --ink-3: #9f9385;
+  --ink-inverse: #1a1714;
+
+  --clay-050: #2c2019;
+  --clay-100: #362619;
+  --clay-200: #4b3425;
+  --clay-300: #6f4a32;
+  --clay-400: #9d6444;
+  --clay-500: #bb7b56;
+  --clay-600: #cd8a62;
+  --clay-700: #e0a382;
+  --clay-800: #eec3aa;
+
+  --moss-100: #26312a;
+  --moss-500: #7d9a78;
+  --moss-600: #9bbd96;
+  --moss-ring: rgba(155, 189, 150, 0.18);
+  --amber-100: #332a1c;
+  --amber-line: #4a3b22;
+  --amber-600: #d3a96c;
+  --rose-100: #3a2320;
+  --rose-line: #56332c;
+  --rose-600: #d98a7e;
+  --rose-700: #e7a196;
+
+  --focus: #e0a382;
+  --focus-ring: rgba(224, 163, 130, 0.18);
+  --btn-primary-bg: #c9825a;
+  --btn-primary-bg-hover: #d6946c;
+  --btn-primary-fg: #1a1512;
+  --me-bubble: #33291f;
+  --me-bubble-line: #46382a;
+  --him-bubble: #231f1b;
+  --him-bubble-line: #382f28;
+  --care-bg: #2b2119;
+  --care-bg-2: #312419;
+  --care-line: #4a392a;
+  --field-bg: #1e1a17;
+  --field-bg-focus: #26211d;
+  --selection: rgba(205, 138, 98, 0.28);
+  --scrim: rgba(8, 6, 5, 0.58);
+  --grain-opacity: 0.05;
+  --grain-blend: soft-light;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.28), 0 2px 6px rgba(0, 0, 0, 0.18);
+  --sh-2: 0 8px 20px -10px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.25);
+  --sh-3: 0 22px 48px -20px rgba(0, 0, 0, 0.65), 0 6px 14px -8px rgba(0, 0, 0, 0.4);
+}

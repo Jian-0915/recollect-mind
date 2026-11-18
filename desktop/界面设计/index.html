@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阿澈 · 界面规范</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("ache.theme");
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/ui.css">
+<link rel="stylesheet" href="assets/pages.css">
+</head>
+<body>
+<div class="ambient" aria-hidden="true"></div>
+
+<div class="doc">
+  <div class="doc__bar">
+    <div class="doc__brand">
+      <span class="seal seal--xs" aria-hidden="true">澈</span>
+      <span class="doc__brand-name">阿澈 · 界面规范</span>
+    </div>
+    <nav class="doc__nav" aria-label="页面">
+      <a href="chat.html">对话页</a>
+      <a href="chat-options.html">对话版式</a>
+      <a href="settings.html">人设设置</a>
+      <a href="popup.html">主动关心</a>
+      <button class="btn btn--ghost btn--sm" type="button" data-theme-toggle style="margin-left:8px">
+        <span data-theme-label>切到暖夜</span>
+      </button>
+    </nav>
+  </div>
+
+  <header class="doc__hero">
+    <p class="doc__eyebrow">DESIGN SYSTEM · V1.0</p>
+    <h1 class="doc__title">晨光纸页</h1>
+    <p class="doc__lede">
+      陪伴型 agent 的界面应该像一张摊开的纸，而不是一块发光的玻璃。暖纸底、发丝线、陶土色的一点点重量；
+      阿澈说的话用宋体，界面用无衬线——两种声音，一眼分得开。白天是纸，夜里是一盏没关的灯。
+    </p>
+    <div class="doc__stats">
+      <div class="stat"><div class="stat__v">5</div><div class="stat__k">页面（含版式对照）</div></div>
+      <div class="stat"><div class="stat__v">2</div><div class="stat__k">主题 · 晨光 / 暖夜</div></div>
+      <div class="stat"><div class="stat__v">4</div><div class="stat__k">层：令牌 → 原子 → 页面 → 交互</div></div>
+      <div class="stat"><div class="stat__v">AA</div><div class="stat__k">对比度全达标</div></div>
+    </div>
+    <div class="showcase" style="margin-top:20px">
+      <a class="btn btn--primary" href="chat.html">打开对话页</a>
+      <a class="btn btn--soft" href="settings.html">人设设置页</a>
+      <a class="btn btn--ghost" href="popup.html">主动关心弹窗</a>
+      <span class="field__hint" style="margin-left:auto">窗口基准 420 × 760 · 最小 360 × 560 · 可拉伸</span>
+    </div>
+  </header>
+
+  <section class="doc__section">
+    <h2 class="doc__h">设计立场 <span>01</span></h2>
+    <p class="doc__p">
+      这一版最容易被认成“网页”的地方，是上一版用了深色底 + 发光强调。这一版反过来：底色是纸，强调色只有陶土一种，
+      深度靠 1px 发丝线和 4px 级的留白节奏，而不是投影堆叠。整个界面只有三处允许出现阴影——浮层、输入框、对话气泡。
+    </p>
+    <ul class="checklist">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span><strong>纸，不是玻璃。</strong>没有毛玻璃、没有霓虹渐变、没有纯黑纯白；背景颗粒是固定的 5% 噪点层，不参与滚动重绘。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span><strong>衬线是它的声音。</strong>阿澈的每句话用 Noto Serif SC 排版，行高 1.82；你的话是 13px 无衬线气泡。抬眼就能分清谁在说。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span><strong>主动必须留退路。</strong>主动关心永远带“先不用”，浮层不抢焦点、不遮输入区；回应只预填话题，不替你发送。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span><strong>高级项要收起来。</strong>身份宪法和版本历史放在“高级”里折叠，默认不打扰日常设置。</span></li>
+    </ul>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">颜色 <span>02</span></h2>
+    <p class="doc__p">三层纸面（bg / surface / surface-2）+ 三级墨色 + 一档陶土。语义色只用于状态，不做装饰。色块会随主题实时切换。</p>
+
+    <div class="swatches">
+      <div class="swatch"><div class="swatch__chip" style="background:var(--bg)"></div><div class="swatch__meta"><div class="swatch__name">纸底 · bg</div><div class="swatch__hex">#f6f1e7 / #1a1714</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--surface)"></div><div class="swatch__meta"><div class="swatch__name">纸面 · surface</div><div class="swatch__hex">#fffcf6 / #231f1b</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--surface-2)"></div><div class="swatch__meta"><div class="swatch__name">凹陷 · surface-2</div><div class="swatch__hex">#f3ecdf / #2b2622</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--line-strong)"></div><div class="swatch__meta"><div class="swatch__name">发丝线 · line</div><div class="swatch__hex">#d9ccb6 / #4a3f35</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--ink)"></div><div class="swatch__meta"><div class="swatch__name">墨 · ink</div><div class="swatch__hex">#2f2a23 / #f2eade</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--ink-3)"></div><div class="swatch__meta"><div class="swatch__name">三级文字 · ink-3</div><div class="swatch__hex">#746a5e / #9f9385</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--clay-400)"></div><div class="swatch__meta"><div class="swatch__name">陶土 · clay-400</div><div class="swatch__hex">#c98d67 / #9d6444</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--clay-600)"></div><div class="swatch__meta"><div class="swatch__name">主色 · clay-600</div><div class="swatch__hex">#9e4f2c / #cd8a62</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--moss-600)"></div><div class="swatch__meta"><div class="swatch__name">在线 · moss-600</div><div class="swatch__hex">#4f6b53 / #9bbd96</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--amber-600)"></div><div class="swatch__meta"><div class="swatch__name">提醒 · amber-600</div><div class="swatch__hex">#87642a / #d3a96c</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--rose-600)"></div><div class="swatch__meta"><div class="swatch__name">危险 · rose-600</div><div class="swatch__hex">#a0453b / #d98a7e</div></div></div>
+      <div class="swatch"><div class="swatch__chip" style="background:var(--me-bubble)"></div><div class="swatch__meta"><div class="swatch__name">你的气泡</div><div class="swatch__hex">#efe3d1 / #33291f</div></div></div>
+    </div>
+    <p class="doc__p" style="margin-top:12px">陶土只承担一件事：<strong>可点的地方和它主动开口的地方</strong>。所以主按钮、发送键、主动关心标签用它，正文永远不用彩色。</p>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">排版 <span>03</span></h2>
+    <p class="doc__p">两套声音：宋体说人话，无衬线说界面。字重只用 400 / 500 两档，标题靠字号与留白建立层级，不靠粗体。</p>
+    <div class="type-row"><div class="type-row__sample" style="font-family:var(--font-serif);font-size:30px;line-height:1.32">跟阿澈说句话吧</div><span class="type-row__meta">serif 400 · 30 / 1.32</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-family:var(--font-serif);font-size:20px;line-height:1.45">身份一句话 · 设置页标题</div><span class="type-row__meta">serif 400 · 20 / 1.45</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-family:var(--font-serif);font-size:14.5px;line-height:1.82">两版一起被推翻，泄气很合理。先把两件事分开看：方向变了，和你做得不行——它们不是同一件事。</div><span class="type-row__meta">serif 400 · 14.5 / 1.82</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-size:14px;line-height:1.72">今天评审被推翻了两版，有点泄气。</div><span class="type-row__meta">sans 400 · 14 / 1.72</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-size:13px;font-weight:500">保存新版本</div><span class="type-row__meta">sans 500 · 13</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-size:11px;color:var(--ink-3)">已记住 · 你今天评审不顺</div><span class="type-row__meta">sans 400 · 11 · ink-3</span></div>
+    <div class="type-row"><div class="type-row__sample" style="font-family:var(--font-mono);font-size:10px;color:var(--ink-3);letter-spacing:.08em">22:14 · 11-17</div><span class="type-row__meta">mono · 10</span></div>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">间距 · 圆角 · 阴影 <span>04</span></h2>
+    <p class="doc__p">间距以 4px 为单位，常用 8 / 12 / 16 / 24；气泡 16px、卡片 16–18px、浮层 20px。阴影只有三档，且都带暖色调，不用黑色。</p>
+    <div class="showcase" style="align-items:flex-end">
+      <div style="display:flex;align-items:flex-end;gap:10px">
+        <div style="width:4px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:8px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:12px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:16px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:24px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:32px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:48px;height:24px;background:var(--clay-300)"></div>
+        <div style="width:64px;height:24px;background:var(--clay-300)"></div>
+      </div>
+      <span class="type-row__meta">4 / 8 / 12 / 16 / 24 / 32 / 48 / 64</span>
+    </div>
+    <div class="showcase">
+      <div style="width:48px;height:48px;background:var(--surface);border:1px solid var(--line);border-radius:6px"></div>
+      <div style="width:48px;height:48px;background:var(--surface);border:1px solid var(--line);border-radius:10px"></div>
+      <div style="width:48px;height:48px;background:var(--surface);border:1px solid var(--line);border-radius:16px"></div>
+      <div style="width:48px;height:48px;background:var(--surface);border:1px solid var(--line);border-radius:20px"></div>
+      <div style="width:48px;height:48px;background:var(--surface);border:1px solid var(--line);border-radius:999px"></div>
+      <span class="type-row__meta">6 / 10 / 16 / 20 / pill</span>
+    </div>
+    <div class="showcase">
+      <div style="width:76px;height:44px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-1)"></div>
+      <div style="width:76px;height:44px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-2)"></div>
+      <div style="width:76px;height:44px;background:var(--surface);border:1px solid var(--line);border-radius:12px;box-shadow:var(--sh-3)"></div>
+      <span class="type-row__meta">sh-1 输入框 · sh-2 提示 · sh-3 浮层</span>
+    </div>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">对话组件 <span>05</span></h2>
+    <p class="doc__p">五种状态共用一套骨架：印章头像 24px、气泡 16px 圆角、说话方一侧收角 5px。记忆回执永远比正文淡一级，不抢注意力。</p>
+    <p class="doc__p">对话页有三种疏密——<a class="linkish" href="chat-options.html">舒展 / 信件 / 极简</a>。同一份 DOM，切换 <code>data-layout</code> 即可，令牌与文案不变。</p>
+
+    <div class="demo-window">
+      <div class="stamp"><span>20:41</span></div>
+      <article class="msg msg--me">
+        <div class="bubble bubble--me"><p>今天评审被推翻了两版，有点泄气。</p></div>
+      </article>
+      <article class="msg msg--him">
+        <span class="seal seal--xs" aria-hidden="true">澈</span>
+        <div class="msg__body">
+          <div class="bubble bubble--him"><p>两版一起被推翻，泄气很合理。先把两件事分开看：方向变了，和你做得不行——它们不是同一件事。</p></div>
+          <p class="memory">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10v16l-5-3.4L7 20V4z"></path></svg>
+            <span>已记住 · 你今天评审不顺</span>
+          </p>
+        </div>
+      </article>
+      <div class="thinking">
+        <span class="seal seal--xs" aria-hidden="true">澈</span>
+        <span class="thinking__dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>在想…</span>
+      </div>
+      <article class="msg msg--him">
+        <span class="seal seal--xs" aria-hidden="true">澈</span>
+        <div class="msg__body">
+          <div class="care">
+            <div class="care__head">
+              <span class="care__dot" aria-hidden="true"></span>
+              <span>阿澈 主动来找你</span>
+              <span class="care__time">刚刚</span>
+            </div>
+            <p class="care__text">刚看到你把周四的评审挪到了下午。空出来的那一段，别顺手填满。</p>
+            <div class="care__actions">
+              <button class="btn btn--primary btn--sm" type="button">回应</button>
+              <button class="btn btn--ghost btn--sm" type="button">先不用</button>
+            </div>
+          </div>
+        </div>
+      </article>
+    </div>
+
+    <div class="showcase" style="margin-top:16px">
+      <button class="btn btn--primary" type="button">保存新版本</button>
+      <button class="btn btn--soft" type="button">填入示例</button>
+      <button class="btn btn--ghost" type="button">取消</button>
+      <button class="btn btn--quiet" type="button">预览注入</button>
+      <button class="btn btn--primary" type="button" disabled>已保存</button>
+      <button class="btn btn--danger" type="button">清空</button>
+    </div>
+
+    <div class="showcase showcase--stack">
+      <span class="showcase__label">表单 · label 在上，提示在下，错误也在下</span>
+      <div class="field">
+        <div class="field__head"><label class="field__label" for="doc-input">口头禅</label><span class="field__note">可选</span></div>
+        <input class="input" id="doc-input" value="我在。" maxlength="12">
+        <p class="field__hint">一两条就够。用得多会显得在演。</p>
+      </div>
+      <div class="pills" role="radiogroup" aria-label="长度">
+        <label class="pill"><input type="radio" name="doc-length" value="短句"><span>短句</span></label>
+        <label class="pill"><input type="radio" name="doc-length" value="适中" checked><span>适中</span></label>
+        <label class="pill"><input type="radio" name="doc-length" value="展开"><span>展开</span></label>
+      </div>
+      <div class="chips">
+        <span class="chip">温和<button class="chip__x" type="button" aria-label="移除性格：温和"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+        <span class="chip">记得细节<button class="chip__x" type="button" aria-label="移除性格：记得细节"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+        <span class="chip">不催促<button class="chip__x" type="button" aria-label="移除性格：不催促"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+      </div>
+    </div>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">无障碍 <span>06</span></h2>
+    <p class="doc__p">按 WCAG 2.1 AA 落地：正文 4.5:1 是底线，大字 3:1；焦点永远可见；键盘能走完所有流程；动效可以关掉。</p>
+    <ul class="checklist">
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>正文墨色对纸底 <strong>12.7:1</strong>；次要文字 6.9:1；三级文字 4.6:1；主按钮白字对陶土 <strong>5.7:1</strong>。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>暖夜主题：正文 14.3:1、三级文字 5.7:1、陶土强调文字 6.0:1。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>Tab 顺序：顶栏头像 → 状态 → 菜单 → 设置 → 消息流 → 输入框 → 发送；抽屉与确认弹层做了焦点循环与 Esc 关闭。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>输入框有真实 label、说明与 <code>aria-describedby</code>；回车发送会避开中文输入法组合态。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>主动关心是非模态浮层：不抢焦点；回应只预填，不自动发送。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>交互元素粗指针下自动升到 44px；<code>prefers-reduced-motion</code> 下所有循环动效静止。</span></li>
+      <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg><span>浏览器缩放到 200%：420 宽窗口回落为单列，气泡与表单不溢出。</span></li>
+    </ul>
+  </section>
+
+  <section class="doc__section">
+    <h2 class="doc__h">交付 <span>07</span></h2>
+    <table class="spec">
+      <thead>
+        <tr><th>页面</th><th>结构</th><th>状态 / 交互</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>chat.html</td><td>顶栏 · 消息流 · 输入区</td><td>空状态 / 你的消息 / 阿澈消息 + 记忆回执 / 在想… / 主动关心（回应 · 先不用）/ 发送后模拟回复 / 暖夜切换 / 三种版式</td></tr>
+        <tr><td>chat-options.html</td><td>三栏版式对照 + 实时预览</td><td>舒展 / 信件 / 极简，点开即设为默认</td></tr>
+        <tr><td>settings.html</td><td>分组列表 → 分组详情（宽屏双栏）</td><td>6 组字段 / 性格芯片 8 条上限 / 主动性滑杆 / 宪法折叠 / 版本恢复 / 注入预览抽屉 / 清空确认 / 未保存状态</td></tr>
+        <tr><td>popup.html</td><td>角落浮层单卡</td><td>回应 → 回对话并预填 / 先不用 → 淡出 / 收起 / 再看一次</td></tr>
+        <tr><td>assets/</td><td>tokens.css · ui.css · pages.css · layouts.css · app.js</td><td>令牌 → 组件原子 → 页面组合 → 版式 → 交互；无第三方依赖</td></tr>
+      </tbody>
+    </table>
+    <p class="doc__p" style="margin-top:14px">资源全部本地、无 CDN、无图片依赖；字体优先使用系统内 Noto Serif SC / Noto Sans SC，缺失时回落宋体与系统无衬线。可直接放进 <code>desktop/web/</code>，按 <code>/desk-assets/</code> 路径引用。</p>
+    <div class="doc__foot">
+      <span>设计稿 v1.0 · 2026-11-17 · 阿澈桌面端</span>
+      <span>实现就绪：原型可点 · 待接 DeskAPI</span>
+    </div>
+  </section>
+</div>
+
+<script src="assets/app.js" defer></script>
+</body>
+</html>

@@ -37,8 +37,26 @@ from pathlib import Path
 from . import config
 
 ENABLED = os.environ.get("NEUROMEM_LIVE_WEB", "1") != "0"
-TRACE_PATH = Path(config.DATA_DIR) / "live_web.trace.jsonl"
 MAX_INPUT = 2000
+
+
+def _trace_path():
+    """trace 跟着**库**走，不是跟着 data 目录走。
+
+    原来固定 ``data/live_web.trace.jsonl``，于是拿副本库跑端到端时，
+    测试对话全写进了主库的 trace——事后看日志会把测试当成用户的真实行为，
+    排查方向直接跑偏（踩过一次）。主库仍用原名，不动历史。
+    """
+    env = os.environ.get("NEUROMEM_LIVE_TRACE")
+    if env:
+        return Path(env)
+    dbp = Path(config.DB_PATH)
+    if dbp.name == "neuromem.db":
+        return dbp.parent / "live_web.trace.jsonl"
+    return dbp.parent / (dbp.stem + ".live.trace.jsonl")
+
+
+TRACE_PATH = _trace_path()
 
 _lock = threading.Lock()
 _agent = None
@@ -222,6 +240,8 @@ def turn(text):
             "fact_trimmed": row.get("fact_trimmed"),
             "remember_fallback": row.get("remember_fallback"),
             "mood": row.get("mood_top") or "",
+            # 冷战期透出脸色：前端据此显示「还在生气」，也让这段行为可解释。
+            "sulk": row.get("sulk") or {},
             "hint": _hint(row),
             "elapsed_ms": row.get("elapsed_ms"),
             "turn": row.get("turn"),

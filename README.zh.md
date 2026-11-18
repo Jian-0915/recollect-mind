@@ -1,6 +1,6 @@
 # Recollect（中文说明）
 
-> English: [README.md](README.md) ｜ 演进细节: [docs/DEVLOG.md](docs/DEVLOG.md)
+> English: [README.md](README.md) ｜ 版本清单: [CHANGELOG.md](CHANGELOG.md) ｜ 演进细节: [docs/DEVLOG.md](docs/DEVLOG.md)
 
 **一个从空白出发、会记、会联想、会忘、也分得清"这是谁的事"的长期记忆层。**
 SQLite 上的一层记忆机制，同时提供 MCP server、HTTP API + Web 管理界面、进程内 SDK 三种接法。

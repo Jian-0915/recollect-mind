@@ -46,9 +46,13 @@ tests/*.py
 # 作者自用的发布操作手册（本地保留，不进公开仓库）
 docs/PUBLISH.md
 
-# 桌面端（阿澈）：本地功能，暂不进公开仓库
-desktop/
-start_desktop.bat
+# ---- 桌面端（阿澈）v25 起正式纳入版本库 ----
+# 生产前端 desktop/web/、启动脚本 start_desktop.bat 均可公开克隆使用。
+# 但以下几类仍不进仓库：
+#   1. 实测截图：含真实人设名、对方称呼、版本号与保存时间
+desktop/界面设计/_shots/
+#   2. 设计稿旧备份（已被 desktop/web/ 取代）
+desktop/web_bak_v1/
 
 # 测试临时目录
 .pytest_tmp*/

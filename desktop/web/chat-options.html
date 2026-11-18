@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阿澈 · 对话页版式选择</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("ache.theme");
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/ui.css">
+<link rel="stylesheet" href="assets/pages.css">
+<link rel="stylesheet" href="assets/layouts.css">
+</head>
+<body>
+<div class="ambient" aria-hidden="true"></div>
+
+<div class="options">
+  <div class="doc__bar">
+    <div class="doc__brand">
+      <span class="seal seal--xs" aria-hidden="true">澈</span>
+      <span class="doc__brand-name">阿澈 · 对话页版式</span>
+    </div>
+    <nav class="doc__nav" aria-label="页面">
+      <a href="index.html">对话页</a>
+      <a href="settings.html">人设设置</a>
+      <a href="index.html">规范总览</a>
+    </nav>
+  </div>
+
+  <header class="options__head">
+    <p class="options__eyebrow">THREE LAYOUTS · SAME SYSTEM</p>
+    <h1 class="options__title">三种对话页，选一版</h1>
+    <p class="options__lede">
+      同一套令牌、同一份结构，只改疏密与信息层级。三版都不动接口、不动文案，选好后在对话页的「⋯」菜单里还能随时切换，选择会记住。
+    </p>
+  </header>
+
+  <div class="options__grid">
+    <!-- A 舒展 -->
+    <article class="option">
+      <div class="option__preview" data-layout="air" aria-hidden="true">
+        <div class="option__bar">
+          <span class="seal seal--xs">澈</span>
+          <span class="option__name">阿澈</span>
+          <span class="option__status"><i></i>在</span>
+        </div>
+        <div class="stamp stamp--first"><span>20:41</span></div>
+        <div class="msg msg--me">
+          <div class="bubble bubble--me"><p>今天评审被推翻两版。</p></div>
+        </div>
+        <div class="msg msg--him">
+          <span class="seal seal--xs">澈</span>
+          <div class="msg__body">
+            <div class="bubble bubble--him"><p>泄气很合理，先分开看。</p></div>
+            <p class="memory">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.4L7 20V4z"></path></svg>
+              <span>已记住 · 你今天评审不顺</span>
+            </p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="composer__inner">
+            <div class="composer__field">
+              <span class="composer__input option__ph">跟阿澈说点什么…</span>
+              <span class="send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="option__body">
+        <div class="option__head">
+          <h2 class="option__name-big">舒展</h2>
+          <span class="tag">推荐</span>
+        </div>
+        <p class="option__desc">保留气泡和印章，只把时间线、描边和输入区说明减重。消息间隔 24px，印章改成空心。最像“有人在旁边”。</p>
+        <ul class="option__specs">
+          <li>气泡</li><li>空心印章</li><li>24px 节奏</li>
+        </ul>
+        <a class="btn btn--soft btn--sm" href="index.html?layout=air">打开这一版</a>
+      </div>
+    </article>
+
+    <!-- B 信件 -->
+    <article class="option">
+      <div class="option__preview" data-layout="letter" aria-hidden="true">
+        <div class="option__bar">
+          <span class="seal seal--xs">澈</span>
+          <span class="option__name">阿澈</span>
+          <span class="option__status"><i></i>在</span>
+        </div>
+        <div class="stamp"><span>20:41</span></div>
+        <div class="msg msg--me">
+          <div class="bubble bubble--me"><p>今天评审被推翻两版。</p></div>
+        </div>
+        <div class="msg msg--him">
+          <span class="seal seal--xs">澈</span>
+          <div class="msg__body">
+            <div class="bubble bubble--him"><p>泄气很合理，先分开看。</p></div>
+            <p class="memory">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.4L7 20V4z"></path></svg>
+              <span>已记住 · 你今天评审不顺</span>
+            </p>
+          </div>
+        </div>
+        <div class="composer">
+          <div class="composer__inner">
+            <div class="composer__field">
+              <span class="composer__input option__ph">写点什么…</span>
+              <span class="send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="option__body">
+        <div class="option__head">
+          <h2 class="option__name-big">信件</h2>
+        </div>
+        <p class="option__desc">阿澈的话变成正文，你的话变成页边批注。没有气泡、没有时间线，输入区是一条书写线。最安静，也最不像聊天软件。</p>
+        <ul class="option__specs">
+          <li>无气泡</li><li>宋体正文</li><li>右侧批注</li>
+        </ul>
+        <a class="btn btn--ghost btn--sm" href="index.html?layout=letter">打开这一版</a>
+      </div>
+    </article>
+
+    <!-- C 极简 -->
+    <article class="option">
+      <div class="option__preview" data-layout="quiet" aria-hidden="true">
+        <div class="option__bar">
+          <span class="seal seal--xs">澈</span>
+          <span class="option__name">阿澈</span>
+          <span class="option__status"><i></i>在</span>
+        </div>
+        <div class="stamp"><span>20:41</span></div>
+        <div class="msg msg--me">
+          <div class="bubble bubble--me"><p>今天评审被推翻两版。</p></div>
+        </div>
+        <div class="msg msg--him">
+          <span class="seal seal--xs">澈</span>
+          <div class="msg__body">
+            <div class="bubble bubble--him"><p>泄气很合理，先分开看。</p></div>
+            <p class="memory">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.4L7 20V4z"></path></svg>
+              <span>已记住 · 你今天评审不顺</span>
+            </p>
+          </div>
+        </div>
+        <p class="memory-summary">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v16l-5-3.4L7 20V4z"></path></svg>
+          <span>今晚记住了 2 件事</span>
+        </p>
+        <div class="composer">
+          <div class="composer__inner">
+            <div class="composer__field">
+              <span class="composer__input option__ph">跟阿澈说点什么…</span>
+              <span class="send">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"></path><path d="M6 11l6-6 6 6"></path></svg>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="option__body">
+        <div class="option__head">
+          <h2 class="option__name-big">极简</h2>
+        </div>
+        <p class="option__desc">收起头像、逐条回执和时间戳，用一行“今晚记住了 2 件事”代替。一屏能多放两条消息，适合高频使用。</p>
+        <ul class="option__specs">
+          <li>无头像</li><li>摘要回执</li><li>胶囊输入</li>
+        </ul>
+        <a class="btn btn--ghost btn--sm" href="index.html?layout=quiet">打开这一版</a>
+      </div>
+    </article>
+  </div>
+
+  <p class="options__note">
+    <strong>怎么选：</strong>想要“有人在旁边”的陪伴感选舒展；想让它更像一封信、少一点界面感选信件；想一屏看到更多、少被装饰打断选极简。
+    打开任意一版后会记住选择；在对话页「⋯ → 版式」里仍可随时切换，不需要改代码。
+  </p>
+</div>
+
+<script src="assets/app.js" defer></script>
+</body>
+</html>

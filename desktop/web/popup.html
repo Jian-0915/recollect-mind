@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>阿澈 · 主动关心弹窗</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("ache.theme");
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/ui.css">
+<link rel="stylesheet" href="assets/pages.css">
+</head>
+<body class="app app--popup">
+<div class="ambient" aria-hidden="true"></div>
+
+<div class="popup-page">
+  <h1 class="sr-only">主动关心弹窗</h1>
+  <p class="popup-page__note">
+    <strong>主动关心 · 角落浮层</strong>
+    约 352 × 186，屏幕右下浮出，不抢焦点、不遮输入区。回应后回到对话页，把话题预填进输入框，由你确认发送。
+  </p>
+
+  <div class="popup-page__stage">
+    <aside class="popup" id="popup" role="dialog" aria-labelledby="popName">
+      <div class="popup__head">
+        <span class="seal seal--xs" aria-hidden="true">澈</span>
+        <span class="popup__name" id="popName">阿澈</span>
+        <span class="popup__time">刚刚</span>
+        <button class="popup__close" type="button" id="ppClose" aria-label="收起这张卡片">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+        </button>
+      </div>
+      <p class="popup__text">刚看到你把周四的评审挪到下午了。空出来的那一段，别又填满。</p>
+      <div class="popup__actions">
+        <button class="btn btn--ghost btn--sm" type="button" data-pp="later">先不用</button>
+        <button class="btn btn--primary btn--sm" type="button" data-pp="reply">回应</button>
+      </div>
+    </aside>
+  </div>
+
+  <div class="popup-page__tools">
+    <a class="linkish" href="index.html" style="margin-right:auto">← 规范页</a>
+    <button class="linkish" type="button" id="reset" hidden>再看一次这张卡片</button>
+  </div>
+</div>
+
+<script src="logic.js"></script>
+<script src="assets/app.js" defer></script>
+</body>
+</html>

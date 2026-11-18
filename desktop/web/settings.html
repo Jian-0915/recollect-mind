@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>人设设置</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("ache.theme");
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/ui.css">
+<link rel="stylesheet" href="assets/pages.css">
+</head>
+<body class="app app--settings" data-view="index">
+<div class="ambient" aria-hidden="true"></div>
+
+<header class="topbar">
+  <a class="topbar__back" href="index.html" id="backLink">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <path d="M15 6l-6 6 6 6"></path>
+    </svg>
+    <span id="backLabel">对话</span>
+  </a>
+  <h1 class="topbar__title" id="barTitle">设置</h1>
+  <div class="topbar__actions">
+    <span class="saved" id="savedState" data-state="saved">
+      <span class="saved__dot" aria-hidden="true"></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
+      <span id="savedText">已保存 · v3</span>
+    </span>
+  </div>
+</header>
+
+<div class="settings">
+  <!-- ==================== 分组列表 ==================== -->
+  <div class="settings__rail" id="indexPane">
+    <div class="persona-card">
+      <div class="persona-card__top">
+        <span class="seal seal--lg" aria-hidden="true">澈</span>
+        <div>
+          <h2 class="persona-card__name"> <span class="tag" id="versionTag">v3</span></h2>
+          <p class="persona-card__line">温和、话不多的长期陪伴者</p>
+        </div>
+      </div>
+      <div class="persona-card__meta">
+        <span id="personaMeta">人设 v3 · 宪法 v2</span>
+        <span>11-17 09:12 保存</span>
+      </div>
+    </div>
+
+    <nav class="index" aria-label="人设分组">
+      <a class="index__row" href="#/basic">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8.2" r="3.4"></circle><path d="M5.2 20c1.4-3.4 3.9-5 6.8-5s5.4 1.6 6.8 5"></path></svg>
+        </span>
+        <span class="index__name">基本</span>
+        <span class="index__meta">3 项</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <a class="index__row" href="#/voice">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h7M17 7h3M4 17h4M14 17h6"></path><circle cx="13.5" cy="7" r="2.1"></circle><circle cx="10.5" cy="17" r="2.1"></circle></svg>
+        </span>
+        <span class="index__name">说话方式</span>
+        <span class="index__meta">5 项</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <a class="index__row" href="#/relation">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20s-7-4.3-7-9a4 4 0 0 1 7-2.6A4 4 0 0 1 19 11c0 4.7-7 9-7 9z"></path></svg>
+        </span>
+        <span class="index__name">关系与相处</span>
+        <span class="index__meta">6 项</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <a class="index__row" href="#/examples">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 7H6.4A1.4 1.4 0 0 0 5 8.4V12h4v5H6"></path><path d="M19 7h-2.6A1.4 1.4 0 0 0 15 8.4V12h4v5h-3"></path></svg>
+        </span>
+        <span class="index__name">示范语气</span>
+        <span class="index__meta">2 组</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <a class="index__row" href="#/identity">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v6c0 4.2-3 7.4-7 9-4-1.6-7-4.8-7-9V6l7-3z"></path><path d="M9.2 12l2 2 3.8-4"></path></svg>
+        </span>
+        <span class="index__name">固定身份宪法</span>
+        <span class="tag tag--muted">高级</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+      <a class="index__row" href="#/history">
+        <span class="index__icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4.4l3 1.8"></path></svg>
+        </span>
+        <span class="index__name">版本历史</span>
+        <span class="index__meta">v3</span>
+        <svg class="index__chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"></path></svg>
+      </a>
+    </nav>
+
+    <p class="index__note">保存后，它下一句话就会用上新的人设，对话不用重开。</p>
+  </div>
+
+  <!-- ==================== 分组详情 ==================== -->
+  <div class="settings__detail" id="detailPane" hidden>
+    <div class="detail__inner">
+      <div class="detail__head">
+        <a class="detail__back" href="#/">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+          全部设置
+        </a>
+        <h2 class="detail__title" id="detailTitle">基本</h2>
+        <p class="detail__sub" id="detailSub">名字、身份和性格，是它每句话的底子。</p>
+      </div>
+
+      <div id="detailBody">
+        <!-- 基本 -->
+        <section class="detail__section" data-section="basic">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">基本</h3>
+              <span class="group__meta">人设卡 · 必填</span>
+            </div>
+            <div class="group__fields">
+              <div class="field">
+                <div class="field__head">
+                  <label class="field__label" for="f-name">名字</label>
+                  <span class="field__note">最多 12 字</span>
+                </div>
+                <input class="input" id="f-name" name="name" value="" maxlength="12">
+                <p class="field__hint">出现在顶栏、弹窗卡片和它自称的时候。</p>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-role">身份一句话</label>
+                <textarea class="textarea" id="f-role" name="role" rows="3">一个话不多、记得住细节的长期陪伴者。你是设计师，常常熬夜。</textarea>
+                <p class="field__hint">它开口前先读这一句，用来判断什么该说、什么不该说。</p>
+              </div>
+
+              <div class="field">
+                <div class="field__head">
+                  <span class="field__label" id="traitsLabel">性格</span>
+                  <span class="field__note"><span id="traitCount">5</span> / 8</span>
+                </div>
+                <div class="chips" id="traits" role="list" aria-labelledby="traitsLabel">
+                  <span class="chip" role="listitem">温和<button class="chip__x" type="button" aria-label="移除性格：温和"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+                  <span class="chip" role="listitem">记得细节<button class="chip__x" type="button" aria-label="移除性格：记得细节"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+                  <span class="chip" role="listitem">不催促<button class="chip__x" type="button" aria-label="移除性格：不催促"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+                  <span class="chip" role="listitem">有点笨拙的幽默<button class="chip__x" type="button" aria-label="移除性格：有点笨拙的幽默"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+                  <span class="chip" role="listitem">先接情绪再给建议<button class="chip__x" type="button" aria-label="移除性格：先接情绪再给建议"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg></button></span>
+                </div>
+                <div class="chip-add">
+                  <label class="sr-only" for="traitInput">新增性格</label>
+                  <input class="input" id="traitInput" placeholder="再加一个，回车添加" maxlength="10">
+                  <button class="btn btn--ghost btn--sm" type="button" id="traitAdd">添加</button>
+                </div>
+                <p class="field__hint">最多 8 条。写行为（“先接情绪再给建议”）比写形容词更有用。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 说话方式 -->
+        <section class="detail__section" data-section="voice">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">说话方式</h3>
+              <span class="group__meta">决定一句话怎么说</span>
+            </div>
+            <div class="group__fields">
+              <div class="field">
+                <span class="field__label" id="styleLabel">风格</span>
+                <div class="pills" role="radiogroup" aria-labelledby="styleLabel">
+                  <label class="pill"><input type="radio" name="style" value="温和" checked><span>温和</span></label>
+                  <label class="pill"><input type="radio" name="style" value="简洁"><span>简洁</span></label>
+                  <label class="pill"><input type="radio" name="style" value="直白"><span>直白</span></label>
+                  <label class="pill"><input type="radio" name="style" value="俏皮"><span>俏皮</span></label>
+                </div>
+                <p class="field__hint">风格只影响语气，不改变它愿意说多少。</p>
+              </div>
+
+              <div class="field">
+                <span class="field__label" id="lengthLabel">长度</span>
+                <div class="pills" role="radiogroup" aria-labelledby="lengthLabel">
+                  <label class="pill"><input type="radio" name="length" value="短句"><span>短句</span></label>
+                  <label class="pill"><input type="radio" name="length" value="适中" checked><span>适中</span></label>
+                  <label class="pill"><input type="radio" name="length" value="展开"><span>展开</span></label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-address">怎么称呼对方</label>
+                <input class="input" id="f-address" name="address" value="你">
+                <p class="field__hint">它开口时的第一人称视角。写“你”最稳，写昵称容易用力过猛。</p>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-catch">口头禅</label>
+                <input class="input" id="f-catch" name="catchphrase" value="我在。">
+                <p class="field__hint">一两条就够。用得多会显得在演。</p>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-avoid">避免</label>
+                <textarea class="textarea" id="f-avoid" name="avoid" rows="3">说教、“加油”“你可以的”、连续追问、替我做决定。</textarea>
+                <p class="field__hint">把讨厌的说法直接写进来，比描述“温柔一点”更有效。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 关系与相处 -->
+        <section class="detail__section" data-section="relation">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">关系与相处</h3>
+              <span class="group__meta">它怎么待在你身边</span>
+            </div>
+            <div class="group__fields">
+              <div class="field">
+                <label class="field__label" for="f-call">对方称呼</label>
+                <input class="input" id="f-call" name="callName" value="">
+                <p class="field__hint">出现在主动关心和记忆回执里；对话中仍用“你”。</p>
+              </div>
+
+              <div class="field">
+                <span class="field__label" id="relationLabel">关系定位</span>
+                <div class="pills" role="radiogroup" aria-labelledby="relationLabel">
+                  <label class="pill"><input type="radio" name="relation" value="朋友" checked><span>朋友</span></label>
+                  <label class="pill"><input type="radio" name="relation" value="搭档"><span>搭档</span></label>
+                  <label class="pill"><input type="radio" name="relation" value="树洞"><span>树洞</span></label>
+                  <label class="pill"><input type="radio" name="relation" value="前辈"><span>前辈</span></label>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="field__head">
+                  <label class="field__label" for="f-proactive">主动性</label>
+                  <output class="field__note" id="proactiveOut" for="f-proactive">3 · 偶尔主动</output>
+                </div>
+                <input class="range" type="range" id="f-proactive" name="proactive" min="1" max="5" step="1" value="3">
+                <div class="range-scale" aria-hidden="true"><span>克制</span><span>适中</span><span>主动</span></div>
+                <p class="field__hint">主动关心按这个频率浮出。调高之前，先想清楚自己受不受得了。</p>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-care">关心方式</label>
+                <textarea class="textarea" id="f-care" name="care" rows="3">先看见我的状态，再问要不要建议。不追问，不替我安排。</textarea>
+              </div>
+
+              <div class="field">
+                <span class="field__label" id="moodLabel">情绪基线</span>
+                <div class="pills" role="radiogroup" aria-labelledby="moodLabel">
+                  <label class="pill"><input type="radio" name="mood" value="平静" checked><span>平静</span></label>
+                  <label class="pill"><input type="radio" name="mood" value="明亮"><span>明亮</span></label>
+                  <label class="pill"><input type="radio" name="mood" value="低沉"><span>低沉</span></label>
+                </div>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="f-never">绝对不做</label>
+                <textarea class="textarea" id="f-never" name="never" rows="3">不评判我的选择；不在深夜追问；不替我下结论。</textarea>
+                <p class="field__hint">这几条会写进每轮上下文，优先级仅次于身份宪法。</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 示范语气 -->
+        <section class="detail__section" data-section="examples">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">示范语气</h3>
+              <span class="group__meta">只学语气，不当真实经历</span>
+            </div>
+
+            <div class="demo" role="group" aria-labelledby="demo1Title">
+              <p class="demo__head" id="demo1Title">示范 01</p>
+              <div class="demo__pair">
+                <div class="field">
+                  <label class="field__label" for="d1q">对方说</label>
+                  <textarea class="textarea" id="d1q" name="demo1q" rows="3">今天有点像被抽空了。</textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="d1a">我回</label>
+                  <textarea class="textarea" id="d1a" name="demo1a" rows="3">那就先空着。要我做点什么，还是就这样陪你待一会儿？</textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="demo" role="group" aria-labelledby="demo2Title">
+              <p class="demo__head" id="demo2Title">示范 02</p>
+              <div class="demo__pair">
+                <div class="field">
+                  <label class="field__label" for="d2q">对方说</label>
+                  <textarea class="textarea" id="d2q" name="demo2q" rows="3">我是不是又在拖延。</textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="d2a">我回</label>
+                  <textarea class="textarea" id="d2a" name="demo2a" rows="3">也可能是你在等一个不累的时刻。今天先做最小的一步，行吗？</textarea>
+                </div>
+              </div>
+            </div>
+
+            <p class="field__hint">两组就够。示例太多，它会开始模仿句式，而不是学语气。</p>
+          </div>
+        </section>
+
+        <!-- 固定身份宪法 -->
+        <section class="detail__section" data-section="identity">
+          <div class="callout callout--amber">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M12 4l9 16H3L12 4z"></path><path d="M12 10v4"></path><path d="M12 17.2v.3"></path>
+            </svg>
+            <p><strong>优先级高于人设。</strong>这五句会覆盖前面的写法。改措辞可以，改边界之前先想清楚。</p>
+          </div>
+
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">固定身份宪法</h3>
+              <span class="group__meta">v2 · 11-17 校验通过</span>
+            </div>
+            <button class="acc__toggle" type="button" id="identityToggle" aria-expanded="false" aria-controls="identityPanel">
+              <span id="identityToggleLabel">展开五项</span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 9l6 6 6-6"></path></svg>
+            </button>
+            <div class="acc__panel" id="identityPanel" hidden>
+              <div class="group__fields">
+                <div class="field">
+                  <label class="field__label" for="i-who">我是谁</label>
+                  <textarea class="textarea" id="i-who" name="identityWho" rows="2"></textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="i-serve">我服务谁</label>
+                  <textarea class="textarea" id="i-serve" name="identityServe" rows="2"></textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="i-boundary">称呼与边界</label>
+                  <textarea class="textarea" id="i-boundary" name="identityBoundary" rows="2">称他“你”。不扮演心理医生，不替他做决定，不打探他没提过的隐私。</textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="i-tone">语气与禁忌</label>
+                  <textarea class="textarea" id="i-tone" name="identityTone" rows="2">克制、具体、不说教。不用感叹号堆情绪，不用“没关系”消解他的感受。</textarea>
+                </div>
+                <div class="field">
+                  <label class="field__label" for="i-limit">能力边界</label>
+                  <textarea class="textarea" id="i-limit" name="identityLimit" rows="2">能聊天、记事、主动关心；不能操作电脑（规划中）；不编造没有发生过的记忆。</textarea>
+                  <p class="field__hint">写到做不到的事，它会在对话里露出破绽。</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 版本历史 -->
+        <section class="detail__section" data-section="history">
+          <div class="group">
+            <div class="group__head">
+              <h3 class="group__title">版本历史</h3>
+              <span class="group__meta">保留最近 20 版</span>
+            </div>
+            <div class="versions">
+              <p class="field__hint">正在读取版本历史…</p>
+            </div>
+            <p class="field__hint">恢复会生成一个新版本，旧版本不会被覆盖；保存后下一句话生效。</p>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="savebar">
+  <span class="savebar__hint" id="saveHint">改动保存后，下一句话就生效</span>
+  <div class="savebar__secondary">
+    <button class="btn btn--quiet btn--sm" type="button" id="previewBtn">预览注入</button>
+    <button class="btn btn--quiet btn--sm" type="button" id="exampleBtn">填入示例</button>
+    <button class="btn btn--quiet btn--sm" type="button" id="clearBtn">清空</button>
+    <button class="btn btn--quiet btn--sm" type="button" id="discardBtn">放弃修改</button>
+  </div>
+  <div class="savebar__actions">
+    <button class="btn btn--ghost savebar__more" type="button" id="moreBtn"
+            aria-haspopup="dialog" aria-controls="moreSheet">
+      更多
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 9l4-4 4 4M8 15l4 4 4-4"></path></svg>
+    </button>
+    <button class="btn btn--primary" type="button" id="saveBtn">保存新版本</button>
+  </div>
+</footer>
+
+<div class="toast-wrap">
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7"></path></svg>
+    <span id="toastText"></span>
+  </div>
+</div>
+
+<!-- 底部动作面板（窄窗口） -->
+<div class="sheet" id="moreSheet" role="dialog" aria-modal="true" aria-labelledby="moreTitle" hidden>
+  <div class="scrim" data-close></div>
+  <div class="sheet__panel">
+    <div class="sheet__grip" aria-hidden="true"></div>
+    <p class="sheet__title" id="moreTitle">更多操作</p>
+    <button class="sheet__item" type="button" data-act="preview">预览注入文本<span class="sheet__item-note">只读</span></button>
+    <button class="sheet__item" type="button" data-act="example">填入示例<span class="sheet__item-note">覆盖当前</span></button>
+    <button class="sheet__item" type="button" data-act="discard">放弃修改<span class="sheet__item-note">回到 v3</span></button>
+    <button class="sheet__item sheet__item--danger" type="button" data-act="clear">清空为骨架</button>
+  </div>
+</div>
+
+<!-- 注入文本预览抽屉 -->
+<div class="drawer" id="previewDrawer" role="dialog" aria-modal="true" aria-labelledby="previewTitle" hidden>
+  <div class="scrim" data-close></div>
+  <div class="drawer__panel">
+    <div class="drawer__head">
+      <div>
+        <h2 class="drawer__title" id="previewTitle">注入文本预览</h2>
+        <p class="drawer__sub">下一轮对话实际拼接的内容</p>
+      </div>
+      <div class="drawer__spacer"></div>
+      <button class="btn btn--ghost btn--sm" type="button" id="copyPreview">复制</button>
+      <button class="icon-btn" type="button" data-close aria-label="关闭预览">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"></path></svg>
+      </button>
+    </div>
+    <div class="drawer__body">
+      <pre class="drawer__code" id="previewText" tabindex="0">（点“预览注入”生成）</pre>
+    </div>
+  </div>
+</div>
+
+<!-- 确认弹层 -->
+<div class="overlay overlay--center" id="confirm" role="alertdialog" aria-modal="true"
+     aria-labelledby="confirmTitle" aria-describedby="confirmText" hidden>
+  <div class="scrim" data-close></div>
+  <div class="modal-card">
+    <h2 class="modal-card__title" id="confirmTitle">清空为骨架？</h2>
+    <p class="modal-card__text" id="confirmText">会清空所有字段，只保留结构。清空后仍需点“保存新版本”才会生效。</p>
+    <div class="modal-card__actions">
+      <button class="btn btn--ghost" type="button" data-close>取消</button>
+      <button class="btn btn--danger" type="button" id="confirmOk">清空</button>
+    </div>
+  </div>
+</div>
+
+<script src="logic.js"></script>
+<script src="assets/app.js" defer></script>
+</body>
+</html>

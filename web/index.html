@@ -2264,7 +2264,13 @@ document.addEventListener('keydown', e=>{
   const ok = await checkAuth();
   if(!ok) return;
   loadOverview();
-  switchTab('overview');
+  // 桌面端深链：/desk-web-login 跳来时带 ?tab=events，直接落到指定页
+  let tab = 'overview';
+  try {
+    const q = new URLSearchParams(location.search).get('tab');
+    if(q && PAGE_META[q]) tab = q;
+  } catch(e) {}
+  switchTab(tab);
 })();
 window.addEventListener('resize',()=>{
   graphChart&&graphChart.resize(); growthChart&&growthChart.resize();
