@@ -1091,7 +1091,42 @@ build-cpu\qwen-tts.exe --model ...1.7b-customvoice-Q8_0.gguf \
 
 - 产物全在 `D:\neuro-memory\_tts_trial\`（未入库）：`qwentts.cpp/`（源码 + 三个 build 目录）、`models/`（2.3GB 权重）、测试 wav、各种构建脚本
 - Vulkan 版已装 SDK + 1580 spv，只差 1 个 .comp.cpp；要续就从这里接，先解决上游死锁
-- 下一步才是接桌面端：V1「念出来」按钮 → 独立子进程跑 `tts-server`（OpenAI 兼容 HTTP，自带音色注册）→ 前端 Audio 播放
+- 桌面端接入已在下一节 v27 完成：气泡「念出来」按钮 → 独立子进程跑 `tts-server` → 前端 Web Audio 流式播放。
+
+## v27：语音接入桌面端（2026-11-18）
+
+上节验证了「能出声」，这节解决「怎么接得干净」。几个判断和踩点记在这里。
+
+### 为什么用 tts-server 常驻，不每句起一次 qwen-tts
+
+`qwen-tts.exe` 是单次进程：每念一句都要重新加载 2.3GB 模型，整句 6 秒里大部分耗在加载。工具其实编出了 `tts-server.exe`——OpenAI 兼容的 HTTP 服务，模型只加载一次，之后每句就是一次本地 POST。**先确认它真能跑**才动的界面代码：启动后 `/v1/models` 返回模型 id，`/v1/audio/speech` 发中文返回 181KB 有效 WAV（峰值 11119 / RMS 2370 / 71% 非静音），首帧 331ms。
+
+### 流式 PCM，不是整句 WAV
+
+WAV 模式要等整句合成完（约 7 秒）才有声音，体验很差。实测 `response_format=pcm` 是逐帧吐 s16le：0.68 秒收到首批 4096 字节，之后边生成边返回，全部 184320 字节 / 3.84 秒音频用 6.96 秒。**首帧 0.68 秒就能开念**，所以后端做成 `StreamingResponse` 转发，前端边收边播。
+
+### 前端为什么用 Web Audio 而不是 `<audio>`
+
+`<audio>` 吃不了裸 s16le 流。用 `AudioContext` 把每个 PCM 块转成 `AudioBuffer`，按 `nextAt` 累加排到时间轴上连续播放；不足一个样本的尾字节留到下一块拼接，避免跨块错位出杂音。打断用递增 token 作废旧流回调 + `source.stop()`，重播天然可行。
+
+### 踩过的点
+
+- **测试不能真起服务**：`_build_server()` 只注册路由，进程拉起放在 `main()` 的后台线程里。这样单测注册路由时不会意外 spawn 一个占着 8179 端口的服务；TTS 测试全靠 monkeypatch 替掉子进程和 HTTP。
+- **音色白名单必须在桌面壳这层**：前端传什么 voice 都先过 `tts.VOICES` 白名单，非法值回落默认，绝不把外部字符串拼进下游请求。测过 `../../evil` 被拦回 vivian。
+- **降级要彻底**：模型/exe 缺失 → 按钮不显示；服务没就绪 → 前端先调 `/api/tts/start` 按需拉起；合成失败 → JSON 错误上抛，前端 toast，绝不吐空音频骗人。文字回复始终照常。
+- **关窗回收**：`window.events.closed` 里调 `tts.stop()`，terminate 后 wait 6 秒再 kill；实测 stop 后 `is_ready()` 立刻变 False，端口释放干净。
+
+### 音色模拟能力（已查证，未实装）
+
+工具原生支持两种，但当前下载的 `customvoice` 模型都做不了，需另下约 2G 模型：
+- **零样本克隆**：参考音频 + 转录 → 用那个音色说话（base 模型）。只应在本人或明确授权的音频上用。
+- **声音设计**：一句属性描述 → 生成新音色（voicedesign 模型）。
+两者都还没下载实测，写进 ROADMAP V6/V7，不冒充已验证。
+
+### 验证
+
+- 全量单测 **453 passed**（原 445 + 新增 test_tts.py 的 8 个）。
+- 端到端：`tts.available()` → `tts.start()` 自启 → 首帧 0.75s → 2.64s 音频 / 5.05s 合成 → `tts.stop()` 端口释放。
 
 ## 服务管理
 

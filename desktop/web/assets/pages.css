@@ -106,6 +106,31 @@
   line-height: 1.82;
 }
 
+/* 语音「念出来」按钮：跟在她的气泡下，默认隐藏，模型齐全才显示 */
+.speak-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin-top: 6px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: color .16s, border-color .16s, background .16s;
+}
+.speak-btn[hidden] { display: none; }
+.speak-btn svg { width: 14px; height: 14px; }
+.speak-btn:hover { color: var(--ink); border-color: var(--ink-3); }
+.speak-btn.is-playing {
+  color: var(--accent, var(--ink));
+  border-color: var(--accent, var(--ink-3));
+  background: var(--accent-soft, transparent);
+}
+
 /* 记忆回执 */
 
 .memory {

@@ -1,6 +1,6 @@
 # Recollect
 
-> Version history: [CHANGELOG.md](CHANGELOG.md) ｜ Design notes: [docs/DEVLOG.md](docs/DEVLOG.md)
+> Version history: [CHANGELOG.md](CHANGELOG.md) ｜ What's next: [ROADMAP.md](ROADMAP.md) ｜ Design notes: [docs/DEVLOG.md](docs/DEVLOG.md)
 
 **Long-term memory for conversations that knows *whose* memory it is.**
 

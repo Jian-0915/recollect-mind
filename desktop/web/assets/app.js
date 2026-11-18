@@ -283,6 +283,132 @@
       toEnd();
     }
 
+    /* ---------------- 语音播放（本地 TTS · 流式 PCM） ----------------
+       后端 /api/tts 返回 24kHz 16bit 单声道 s16le 流。Web Audio 不能像
+       <audio> 那样直接喂裸 PCM，所以按块转成 AudioBuffer 排到时间轴上：
+       块到达就调度，nextAt 累加，块间不断流。停止时断开并重置，可再点重播。 */
+    var TTS_RATE = 24000;
+    var ttsPlayer = {
+      ctx: null,
+      sources: [],
+      nextAt: 0,
+      playing: false,
+      token: 0,          // 递增令牌：新播放/打断让旧流的回调失效
+      onState: null,     // 由按钮注入状态回调
+
+      _ctx: function () {
+        if (!this.ctx) {
+          var C = window.AudioContext || window.webkitAudioContext;
+          if (!C) return null;
+          this.ctx = new C({ sampleRate: TTS_RATE });
+        }
+        if (this.ctx.state === "suspended") { try { this.ctx.resume(); } catch (e) {} }
+        return this.ctx;
+      },
+
+      /* 把 s16le 字节块转成 AudioBuffer 并排到 nextAt 之后播放。
+         不足一个样本的尾字节留到下一块，避免跨块错位产生杂音。 */
+      _feed: function (bytes, token, tail) {
+        if (token !== this.token || !bytes.length) return;
+        var ctx = this._ctx();
+        if (!ctx) return;
+        var all = tail ? concat(tail, bytes) : bytes;
+        var n = Math.floor(all.length / 2);
+        var carry = all.subarray(n * 2);
+        var pcm = new Int16Array(n);
+        var dv = new DataView(all.buffer, all.byteOffset, n * 2);
+        for (var i = 0; i < n; i++) pcm[i] = dv.getInt16(i * 2, true);
+        var buf = ctx.createBuffer(1, n, TTS_RATE);
+        var ch = buf.getChannelData(0);
+        for (var j = 0; j < n; j++) ch[j] = pcm[j] / 32768;
+        var src = ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(ctx.destination);
+        var startAt = Math.max(ctx.currentTime, this.nextAt);
+        src.start(startAt);
+        this.nextAt = startAt + buf.duration;
+        this.sources.push(src);
+        this._tail = carry;
+      },
+
+      stop: function () {
+        this.token++;
+        var self = this;
+        this.sources.forEach(function (s) { try { s.stop(); } catch (e) {} try { s.disconnect(); } catch (e) {} });
+        this.sources = [];
+        this.nextAt = 0;
+        this._tail = null;
+        if (this.playing) { this.playing = false; if (self.onState) self.onState(false); }
+      },
+
+      /* 合成并播放整句。返回 Promise<boolean>：是否成功开始（false=不可用/失败）。 */
+      speak: function (text, voice, onState) {
+        var self = this;
+        this.stop();                       // 点新的一句先停掉旧的
+        this.onState = onState || null;
+        var token = this.token;
+        this._tail = null;
+        if (!window.DeskAPI || !DeskAPI.ttsSpeak) return Promise.resolve(false);
+        return DeskAPI.ttsSpeak(text, voice).then(function (res) {
+          if (!res.body || !res.body.getReader) throw { ok: false, error: "浏览器不支持流式播放" };
+          var ctx = self._ctx();
+          if (!ctx) throw { ok: false, error: "浏览器不支持 Web Audio" };
+          self.nextAt = ctx.currentTime + 0.03;   // 留一点调度余量
+          self.playing = true;
+          if (self.onState) self.onState(true);
+          var reader = res.body.getReader();
+          function pump() {
+            return reader.read().then(function (r) {
+              if (token !== self.token) { try { reader.cancel(); } catch (e) {} return; }
+              if (r.done) {
+                if (token === self.token && self.playing) {
+                  // 最后不足样本的尾字节补零念完
+                  if (self._tail && self._tail.length >= 2) self._feed(self._tail, token, null);
+                  self.playing = false;
+                  if (self.onState) self.onState(false);
+                }
+                return;
+              }
+              self._feed(r.value, token, self._tail);
+              return pump();
+            });
+          }
+          pump().catch(function () {
+            if (token === self.token) { self.playing = false; if (self.onState) self.onState(false); }
+          });
+          return true;
+        }).catch(function (e) {
+          self.playing = false;
+          if (self.onState) self.onState(false);
+          var msg = (e && e.error) || "语音不可用";
+          if (toast) toast(msg);
+          return false;
+        });
+      }
+    };
+
+    function concat(a, b) {
+      var out = new Uint8Array(a.length + b.length);
+      out.set(a, 0); out.set(b, a.length);
+      return out;
+    }
+
+    // 服务是否可用：模型齐全才显示按钮；未就绪先按需拉起。缓存结果，避免每条气泡都查。
+    var ttsReadyChecked = false;
+    var ttsAvailable = false;
+    function ensureTtsAvailable() {
+      if (ttsReadyChecked) return Promise.resolve(ttsAvailable);
+      ttsReadyChecked = true;
+      if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false);
+      return DeskAPI.ttsStatus().then(function (s) {
+        ttsAvailable = !!(s && s.available);
+        return ttsAvailable;
+      }).catch(function () { ttsAvailable = false; return false; });
+    }
+
+    // 用户开口（发送新消息）时打断正在念的语音
+    function stopSpeaking() { ttsPlayer.stop(); }
+
     function meMessage(text) {
       var article = document.createElement("article");
       article.className = "msg msg--me";
@@ -313,6 +439,33 @@
       p.textContent = text;
       bubbleEl.appendChild(p);
       body.appendChild(bubbleEl);
+
+      // 语音按钮：默认隐藏，确认模型齐全后才显示。手动点播，不自动念。
+      var speakBtn = document.createElement("button");
+      speakBtn.className = "speak-btn";
+      speakBtn.type = "button";
+      speakBtn.hidden = true;
+      speakBtn.setAttribute("aria-label", "念出来");
+      speakBtn.title = "念出来";
+      function speakIcon(playing) {
+        // 喇叭 / 停止方块，纯 SVG，随状态切换
+        return playing
+          ? '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 5L6 9H3v6h3l5 4V5z"></path><path d="M15.5 8.5a5 5 0 0 1 0 7"></path></svg>';
+      }
+      speakBtn.innerHTML = speakIcon(false);
+      speakBtn.addEventListener("click", function () {
+        if (ttsPlayer.playing) { ttsPlayer.stop(); return; }
+        if (!ttsReadyChecked) { ensureTtsAvailable(); }
+        ttsPlayer.speak(text, "", function (playing) {
+          speakBtn.innerHTML = speakIcon(playing);
+          speakBtn.classList.toggle("is-playing", !!playing);
+          speakBtn.setAttribute("aria-label", playing ? "停止" : "念出来");
+          speakBtn.title = playing ? "停止" : "念出来";
+        });
+      });
+      ensureTtsAvailable().then(function (ok) { if (ok) speakBtn.hidden = false; });
+      body.appendChild(speakBtn);
 
       if (memoryText) {
         var mem = document.createElement("p");
@@ -386,6 +539,7 @@
       if (!text || sending) return;
       if (!window.DeskAPI) { showSendError("逻辑层没加载，刷新一下试试"); return; }
 
+      stopSpeaking();   // 用户开口就停，避免边念边打字互相干扰
       sending = true;
       if (sendError) sendError.hidden = true;
       if (empty) empty.hidden = true;
@@ -1655,6 +1809,9 @@
     lastSaved = getState();
 
     loadPersona();
+
+    // 关窗/离开对话页时停掉语音，不让声音留在后台
+    window.addEventListener("pagehide", function () { stopSpeaking(); });
   }
 
   /* ---------------- 按页面分派 ---------------- */

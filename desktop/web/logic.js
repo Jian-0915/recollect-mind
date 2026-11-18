@@ -65,6 +65,27 @@
   const settingsSave = payload => put('/api/settings', payload);
   const models       = () => get('/api/settings/models');
 
+  /* ==================== 语音（本地神经 TTS，手动触发） ==================== */
+  // 服务可用性：available=模型齐全；ready=服务已加载完可合成。
+  const ttsStatus = () => get('/api/tts/status');
+  // 按需拉起服务（模型已装时约 2~4 秒）；首次点播或 status.starting 时调用。
+  const ttsStart  = () => post('/api/tts/start', {});
+  // 合成请求返回流式 audio/pcm（24k 16bit 单声道）。调用方拿 response.body 边收边播。
+  // 用 request() 不合适（它强制 res.json()），这里单独走 fetch 返回原始响应。
+  async function ttsSpeak(text, voice) {
+    const res = await fetch('/api/tts', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: text, voice: voice || '' })
+    });
+    if (!res.ok) {
+      let err = { ok: false, error: 'HTTP ' + res.status };
+      try { err = await res.json(); } catch (e) {}
+      throw err;
+    }
+    return res; // 调用方负责读流并播放
+  }
+
   /* ==================== 桌面壳能力 ==================== */
   const meta = () => get('/api/desktop/meta');
   // 系统通知与打开网页：pywebview 未就绪时静默降级。
@@ -88,6 +109,7 @@
     proactive, proactiveStat,
     persona, personaTpl, personaPreview, personaSave, personaHistory, personaRollback,
     identity, identityHist, identitySave,
+    ttsStatus, ttsStart, ttsSpeak,
     settings, settingsSave, models,
     meta, notify, openWeb
   };
