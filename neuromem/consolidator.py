@@ -34,13 +34,58 @@ def _similar(a, b):
     return difflib.SequenceMatcher(None, a or "", b or "").ratio()
 
 
+def _process_artifact(t):
+    """检测模型把推理过程当结果吐出的结构性污染。
+
+    v23：云端思考模型曾把「Draft 1/2/3 + 中英对照 + 字符自评」整段草稿链
+    当概念输出（实测 367/467 字入库）。这些是结构特征，原有语义过滤全漏。
+    """
+    if re.search(r"\bDraft(ing)?\b", t, re.I):
+        return True
+    if re.search(r"\b\d+\s*(chars?|characters)\b", t, re.I):
+        return True  # "15 chars. Good." 之类自评
+    if re.search(r"[（(][A-Za-z][^）)]{12,}[）)]", t):
+        return True  # 整句英文括注：中英对照草稿
+    if "\n" in t or "**" in t or re.search(r"(^|\s)[\*\-]\s+\S", t):
+        return True  # 换行/加粗/列表符：概念要求是一句话
+    if re.match(r"^\s*\d+[\.、\)]\s", t):
+        return True  # 编号列表开头
+    return False
+
+
+def _clean_concept(text):
+    """从被草稿链污染的输出里提取最后一句像样的中文短句。
+
+    提不出来就原样返回，交给 _valid_concept 拒收——清洗不负责凭空造概念。
+    最后一句通常是模型草稿里的最终定稿，优先取它。
+    """
+    t = (text or "").strip()
+    if len(t) <= 40 and not _process_artifact(t):
+        return t
+    clean = re.sub(r"[（(][^）)]*[）)]", "", t)
+    clean = re.sub(r"\b\d+\s*(chars?|characters)\b[^\n]*", "", clean, flags=re.I)
+    clean = clean.replace("**", "").replace("\n", " ")
+    parts = re.split(r"\bDraft\s*\d+\s*[:：]|\d+\.\s+|[。！？!?]", clean, flags=re.I)
+    candidates = []
+    for seg in parts:
+        seg = re.sub(r"^[\s\*\-\u2022]+", "", seg).strip(" \t.,;:：，；。")
+        seg = re.sub(r"^\s*\d+[\.、\)]\s*", "", seg)
+        if 4 <= len(seg) <= 40 and len(re.findall(r"[\u4e00-\u9fff]", seg)) >= 4:
+            candidates.append(seg)
+    return candidates[-1] if candidates else t
+
+
 def _valid_concept(text):
-    """过滤退化输出（纯数字/符号/过短/无中文）与笼统空话。"""
+    """过滤退化输出、笼统空话，以及草稿链等结构性污染。"""
     t = (text or "").strip()
     if len(t) < 4:
         return False
+    if len(t) > 40:
+        return False  # 概念要求 20/25 字以内；硬上限留余量，但不放过整段草稿
     han = len(re.findall(r"[\u4e00-\u9fff]", t))
     if han < 4:
+        return False
+    if _process_artifact(t):
         return False
     if re.fullmatch(r"[\d\.\-\s]+", t):
         return False
@@ -206,9 +251,10 @@ def run(conn, min_cluster=2, sim_threshold=0.55, max_cluster=6, limit=300, retry
         for attempt in range(2):
             try:
                 text = llm.generate(prompt + (_RETRY_SUFFIX if attempt else ""),
-                                    max_tokens=120, timeout=45).strip()
+                                    max_tokens=120, timeout=45, think=False).strip()
             except Exception:
                 break
+            text = _clean_concept(text)  # v23：草稿链污染时提取最后一句定稿
             if _valid_concept(text) and not _has_stranger(conn, text, corpus):
                 break
         if not text or not _valid_concept(text) or _has_stranger(conn, text, corpus):
@@ -300,9 +346,10 @@ def run_concepts(conn, min_cluster=3, sim_threshold=0.78):
             conn.commit()  # 同样：LLM 调用前释放写锁
             prompt = _CONCEPT_PROMPT.replace("{items}", "\n".join("- " + t for t in texts))
             try:
-                text = llm.generate(prompt, max_tokens=120, timeout=45).strip()
+                text = llm.generate(prompt, max_tokens=120, timeout=45, think=False).strip()
             except Exception:
                 continue
+            text = _clean_concept(text)
             if not text or not _valid_concept(text):
                 continue
             if any(_similar(text, t) > 0.8 for t in texts):
