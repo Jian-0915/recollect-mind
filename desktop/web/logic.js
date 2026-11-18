@@ -87,10 +87,21 @@
   }
   // 收齐整段 PCM 再交回（ArrayBuffer）。CPU 合成比实时慢（RTF~1.8），边生成
   // 边播会断音卡顿；一次性拿到全段再播虽然多等一两秒，但播放是连续的。
+  // 保留给实时兜底：缓存还没生成好时点播，现场合成一次。
   async function ttsSpeakBuffered(text, voice) {
     const res = await ttsSpeak(text, voice);
     return res.arrayBuffer();
   }
+  // 预合成：回复一产生就入队，后台合成成 wav 落盘，立即返回缓存 key（不阻塞对话）。
+  async function ttsPrepare(text, voice) {
+    return post('/api/tts/precache', { text: text, voice: voice || '' });
+  }
+  // 点播时确保缓存就绪（回复产生时通常已预热好，这里秒回）；按钮可显示准备中。
+  async function ttsEnsure(text, voice) {
+    return post('/api/tts/ensure', { text: text, voice: voice || '' });
+  }
+  // 缓存音频地址：<audio> 直接 src 过来播，命中即秒开。
+  const ttsAudioUrl = (key) => '/api/tts/audio/' + encodeURIComponent(key);
 
   /* ==================== 桌面壳能力 ==================== */
   const meta = () => get('/api/desktop/meta');
@@ -115,7 +126,7 @@
     proactive, proactiveStat,
     persona, personaTpl, personaPreview, personaSave, personaHistory, personaRollback,
     identity, identityHist, identitySave,
-    ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered,
+    ttsStatus, ttsStart, ttsSpeak, ttsSpeakBuffered, ttsPrepare, ttsEnsure, ttsAudioUrl,
     settings, settingsSave, models,
     meta, notify, openWeb
   };

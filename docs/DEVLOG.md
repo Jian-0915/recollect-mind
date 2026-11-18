@@ -1159,6 +1159,42 @@ v27 用了流式播放：块一到就排到时间轴。用户反馈"有卡顿"�
 
 全量单测 453 passed；收全流路径实测 142080 字节完整对齐、2.96 秒音频、峰值 19205、80% 非静音，uncle_fu 男声正常。静态资源供给核实：`settings.html` 含 audio 分区、`logic.js` 含 `ttsSpeakBuffered`、`app.js` 含 `initTtsSettings`。
 
+## v29：预合成缓存直读（2026-11-18）
+
+### 为什么改
+
+用户反馈两件事：**按钮"只会出现一次，离开再进来就消失"**，以及提议"能不能每句话直接生成好、前端读缓存文件"。
+
+第一个是真 bug，根因在 `app.js` 的 `ensureTtsAvailable()`：
+
+```js
+if (ttsReadyChecked) return Promise.resolve(ttsAvailable); // 永久缓存首次结果
+ttsReadyChecked = true;
+if (!window.DeskAPI || !DeskAPI.ttsStatus) return Promise.resolve(false); // API 没注入就判死
+```
+
+它把可用性探测结果**一次性缓存**，且依赖 webview API 的注入时机。首次赶巧探测成功 → 那条气泡显示；页面离开再回来（webview 从缓存恢复 / API 注入时序变了），探测拿到 false 又被永久锁住 → 全部气泡隐藏。结构性问题是：**按钮该不该出现，交给了一个时好时坏的异步探测**。
+
+第二个提议正好是解法：把合成从"点播时"挪到"回复产生时"，缓存成文件，点播直读。这样按钮不需要探测（恒定显示）、点播零等待、也不卡（没有实时合成）。
+
+### 缓存设计
+
+- **key = sha1(音色 \x00 文本)[:20]**：换音色是不同 key，不会互相覆盖；20 位 hex 便于严格校验防路径穿越。
+- **单线程后台队列**：回复渲染时 `precache` 入队立即返回（0.01s），worker 串行合成，不跟对话抢 CPU。同一 key 排队中重复入队被 `_pending` 去重。
+- **wav 原子落盘**：直接让 tts-server 返回带头 wav（`response_format=wav`），`.wav.tmp` 写完 `replace`，杜绝读到半截文件。浏览器 `<audio>` 原生可播，比上一版的"PCM + Web Audio 解码"简单可靠。
+- **LRU 淘汰**：超 `CACHE_MAX`（200）按 mtime 删最旧，约 30MB 封顶。缓存目录 `_tts_trial/tts_cache/` 已在 gitignore。
+- **ensure 兜底**：点播时若缓存恰好没好（首次/排队），`/api/tts/ensure` 入队并轮询等最多 20 秒，按钮转圈；就绪后 `<audio>` 直读。超时如实报错，不吐空音频。
+
+### 踩过的坑
+
+- **单测 monkeypatch 全局 `time.time` 把 pytest 自己卡死**：`test_ensure_route_timeout` 里替换 `desktop.app.time.time`，但 `time` 是标准库模块对象，改的是全局函数，pytest 内部计时也跟着错乱，整个测试进程挂起（SIGTERM）。改成测"服务不可用"分支，不去碰全局时钟。
+- **`precache` 可用性检查只在路由层**：直接调函数绕过了降级判断。挪进 `precache()` 函数自身，函数级自洽。
+- **audio 路由多读一次文件**：原本 `cache_bytes()` 读全文校验、FileResponse 又读一遍。改成 `has_cache()` 只判存在，IO 减半。
+
+### 验证
+
+全量单测 466 passed。端到端（复用残留 tts-server）：precache 0.01s 返回 → 后台 5.52s 合成 153644 字节 wav → ensure 命中 0.01s → audio 路由吐出完整 RIFF wav（153644 字节）。按钮逻辑核实：源码里 `speakBtn.hidden` 与 `ensureTtsAvailable` 均已清零。
+
 ## 服务管理
 
 ```bash

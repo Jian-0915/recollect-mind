@@ -232,6 +232,58 @@ def _build_server(port):
             headers={"X-TTS-Voice": voice, "Cache-Control": "no-store"},
         )
 
+    @api_app.post("/api/tts/precache")
+    def _tts_precache(payload: dict):
+        """回复产生时调用：把这句交给后台队列预合成，立即返回缓存 key。
+
+        不阻塞对话。key 由音色+文本决定；同一句重复入队会被去重。
+        返回 {ok, key}；服务不可用/文本空时 ok=False，上层静默降级。
+        """
+        from desktop import tts
+        text = str((payload or {}).get("text") or "").strip()
+        voice = str((payload or {}).get("voice") or tts.DEFAULT_VOICE).strip()
+        ok, _ = tts.available()
+        key = tts.precache(text, voice) if ok else ""
+        return {"ok": bool(key), "key": key}
+
+    @api_app.post("/api/tts/ensure")
+    def _tts_ensure(payload: dict):
+        """点播时调用：入队并等缓存就绪（最多 ~20 秒），就绪后前端 <audio> 直读。
+
+        正常情况回复产生时已预热好，这里秒回；排队中/首次合成时按钮会显示
+        "准备中"。超时返回 ok=False，前端提示，绝不吞掉文字对话。
+        """
+        import time
+        from desktop import tts
+        text = str((payload or {}).get("text") or "").strip()
+        voice = str((payload or {}).get("voice") or tts.DEFAULT_VOICE).strip()
+        ok, _ = tts.available()
+        key = tts.precache(text, voice) if ok else ""
+        if not key:
+            return {"ok": False, "error": "语音服务不可用"}
+        end = time.time() + 20
+        while time.time() < end:
+            if tts.has_cache(key):
+                return {"ok": True, "key": key}
+            time.sleep(0.25)
+        return {"ok": False, "key": key, "error": "语音合成超时"}
+
+    @api_app.get("/api/tts/audio/{key}")
+    def _tts_audio(key: str):
+        """直读预合成缓存的 wav。key 严格 20 位 hex，防路径穿越。
+
+        命中返回 audio/wav（浏览器 <audio> 原生播，零等待）；
+        未命中返回 404，前端据此走兜底实时合成。
+        """
+        from fastapi.responses import FileResponse, JSONResponse
+        from desktop import tts
+        if not tts.has_cache(key):
+            return JSONResponse({"ok": False, "error": "语音尚未就绪"}, status_code=404)
+        return FileResponse(
+            tts._cache_file(key), media_type="audio/wav",
+            headers={"Cache-Control": "public, max-age=86400", "X-TTS-Cache": "hit"},
+        )
+
     # 桌面端专用的历史回填接口：只读 conversation_turns，供启动时恢复对话气泡。
     # 只在本进程注册，不进内核 api.py（内核服务不需要、也不暴露它）。
     @api_app.get("/api/live/history")

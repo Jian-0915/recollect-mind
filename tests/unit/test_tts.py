@@ -136,3 +136,112 @@ def test_available_checks_all_files(monkeypatch):
     assert isinstance(ok, bool)
     if not ok:
         assert "缺少" in why
+
+
+# ---------------- 预合成缓存 ----------------
+
+def test_cache_key_stable_and_voice_aware():
+    """同一句+同一音色 key 恒定；换音色是不同 key，不互相覆盖。"""
+    k = tts.cache_key("你好", "vivian")
+    assert k == tts.cache_key("你好", "vivian")
+    assert len(k) == 20 and all(c in "0123456789abcdef" for c in k)
+    assert k != tts.cache_key("你好", "serena")
+    assert k != tts.cache_key("你好呀", "vivian")
+
+
+def test_cache_path_traversal_blocked(monkeypatch, tmp_path):
+    """非法 key 必须先被挡掉，绝不拼进路径。"""
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path)
+    assert not tts.has_cache("../../evil")
+    assert not tts.has_cache("x" * 19)
+    assert not tts.has_cache("")
+    assert tts.cache_bytes("../../evil") is None
+
+
+def test_precache_dedups_same_key(monkeypatch):
+    """同一句排队中重复入队只算一次，避免堆一串相同合成任务。"""
+    monkeypatch.setattr(tts, "available", lambda: (True, ""))
+    monkeypatch.setattr(tts, "_ensure_worker", lambda: None)  # 不起真线程
+    monkeypatch.setattr(tts, "has_cache", lambda k: False)
+    tts._pending.clear()
+    try:
+        k1 = tts.precache("同一句话", "vivian")
+        k2 = tts.precache("同一句话", "vivian")
+        assert k1 == k2 and k1 in tts._pending
+        queued = 0
+        while not tts._preq.empty():
+            tts._preq.get_nowait()
+            queued += 1
+        assert queued == 1
+    finally:
+        tts._pending.clear()
+
+
+def test_precache_empty_text_noop(monkeypatch):
+    monkeypatch.setattr(tts, "available", lambda: (True, ""))
+    assert tts.precache("   ", "vivian") == ""
+
+
+def test_precache_degrades_without_models(monkeypatch):
+    monkeypatch.setattr(tts, "available", lambda: (False, "缺少模型"))
+    assert tts.precache("你好", "vivian") == ""
+
+
+def test_evict_keeps_newest(monkeypatch, tmp_path):
+    """超出上限按 mtime 删最旧，保留最新的。"""
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(tts, "CACHE_MAX", 3)
+    for i in range(5):
+        p = tmp_path / ("k%d.wav" % i)
+        p.write_bytes(b"RIFF" + b"\x00" * 40)
+        import os
+        os.utime(p, (1000 + i, 1000 + i))  # i 越大越新
+    tts._evict()
+    left = sorted(p.name for p in tmp_path.glob("*.wav"))
+    assert left == ["k2.wav", "k3.wav", "k4.wav"]
+
+
+def test_precache_route(client, monkeypatch):
+    monkeypatch.setattr(tts, "available", lambda: (True, ""))
+    monkeypatch.setattr(tts, "precache", lambda t, v: "abc123")
+    r = client.post("/api/tts/precache", json={"text": "你好", "voice": "vivian"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "key": "abc123"}
+
+
+def test_precache_route_no_models(client, monkeypatch):
+    monkeypatch.setattr(tts, "available", lambda: (False, "缺少模型"))
+    r = client.post("/api/tts/precache", json={"text": "你好"})
+    assert r.json()["ok"] is False and r.json()["key"] == ""
+
+
+def test_audio_route_cache_hit(client, monkeypatch, tmp_path):
+    """命中返回 audio/wav 且带头；key 透传给缓存层。"""
+    p = tmp_path / ("a" * 20 + ".wav")
+    p.write_bytes(b"RIFFfake")
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path)
+    r = client.get("/api/tts/audio/" + "a" * 20)
+    assert r.status_code == 200
+    assert r.content == b"RIFFfake"
+    assert "wav" in r.headers["content-type"]
+    assert r.headers["x-tts-cache"] == "hit"
+
+
+def test_audio_route_invalid_key_404(client, monkeypatch, tmp_path):
+    monkeypatch.setattr(tts, "CACHE_DIR", tmp_path)
+    r = client.get("/api/tts/audio/../../evil")
+    assert r.status_code in (404, 307)  # 路由不匹配或缓存未命中，都不吐文件
+
+
+def test_ensure_route_ready(client, monkeypatch):
+    monkeypatch.setattr(tts, "available", lambda: (True, ""))
+    monkeypatch.setattr(tts, "precache", lambda t, v: "ready1")
+    monkeypatch.setattr(tts, "has_cache", lambda k: True)
+    r = client.post("/api/tts/ensure", json={"text": "你好"})
+    assert r.status_code == 200 and r.json() == {"ok": True, "key": "ready1"}
+
+
+def test_ensure_route_no_models(client, monkeypatch):
+    """服务不可用时 ensure 如实报错，绝不吞掉文字对话。"""
+    monkeypatch.setattr(tts, "available", lambda: (False, "缺少模型"))
+    r = client.post("/api/tts/ensure", json={"text": "你好"})
+    assert r.json()["ok"] is False and "不可用" in r.json()["error"]
