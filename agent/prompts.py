@@ -5,6 +5,8 @@
 L2 闭环一直缺真实数据的原因。程序侧仍会做白名单校验（只能引用本轮候选）。
 """
 
+from neuromem import timeparse as _tp
+
 OUTPUT_FIELDS = """{
   "reply": "你要说出口的话（自然口语，1~3 句，不要带任何标签）",
   "used_ids": ["本轮真正用到的候选 id；一条没用就给空数组"],
@@ -182,16 +184,7 @@ def _now_block(now=None):
         d = now or datetime.now().astimezone()
         wd = "星期" + "一二三四五六日"[d.weekday()]
         h, mi = d.hour, d.minute
-        if 5 <= h < 11:
-            period = "上午"
-        elif 11 <= h < 13:
-            period = "中午"
-        elif 13 <= h < 18:
-            period = "下午"
-        elif 18 <= h < 22:
-            period = "晚上"
-        else:
-            period = "深夜"
+        period = _tp.period_of(d)   # v42：与时段行为块共用同一套边界
         clock = "%02d:%02d" % (h, mi)
         return (
             "【现在的时间（你确实知道，判断「今天/昨天/上周/明天」一律以此为准）】\n"
@@ -296,6 +289,7 @@ def build_prompt(pack, user_text, history, counterpart="用户",
     parts = [
         SYSTEM_GUARDED if fact_guard else SYSTEM,
         _now_block(now),
+        _tp.time_conduct_block(now),   # v42：知道几点还不够，得知道这个点该说什么
     ]
     if capability_block:
         parts.append(capability_block)
@@ -332,6 +326,7 @@ def build_prompt_no_brain(identity_block, user_text, history, counterpart="用�
     parts = [
         NO_BRAIN_SYSTEM,
         _now_block(now),
+        _tp.time_conduct_block(now),   # v42：同上，两条通道行为一致
     ]
     if capability_block:
         parts.append(capability_block)

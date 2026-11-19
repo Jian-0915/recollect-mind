@@ -15,7 +15,7 @@ import os
 import re
 import threading
 
-from . import affect, companion, db, llm, motivation, persona_card
+from . import affect, companion, db, llm, motivation, persona_card, timeparse as _tp
 
 # 定时检查间隔（分钟）。产出与否由 motivation.pick 决定，勤查不等于勤说。
 TICK_MINUTES = int(os.environ.get("NEUROMEM_PROACTIVE_TICK_MIN", "20"))
@@ -29,6 +29,8 @@ _PROMPT = """你是{name}。不是助手，也没在帮谁写稿——这就是�
 {persona}
 
 {context}
+
+{time_conduct}
 
 {state}
 
@@ -145,11 +147,14 @@ def _latin(text):
     return latin / max(1, len(t)) > 0.4
 
 
-def _unusable(text):
+def _unusable(text, now=None):
     """不是一句能直接发出去的话。"""
     if not (4 <= len(text) <= 120):
         return True
     if "\n" in text.strip():
+        return True
+    # v42：主动消息没有「对方本轮说了什么」可参照，白天一律不许催睡。
+    if not _tp.bedtime_ok(now) and _tp.has_bedtime_talk(text):
         return True
     return (_fabrication(text) or _leak(text) or _latin(text)
             or bool(_NO_EXPERIENCE.search(text))
@@ -242,7 +247,7 @@ def _name(conn):
         return "你"
 
 
-def compose(conn, cand, llm_fn=None):
+def compose(conn, cand, llm_fn=None, now=None):
     """把一条候选包装成自然话语。返回 (文本, 是否 LLM 生成成功)。"""
     kind = str(cand.get("kind") or "missing")
     topic = str(cand.get("topic") or "").strip()[:60]
@@ -277,19 +282,20 @@ def compose(conn, cand, llm_fn=None):
     state = "你此刻的状态：%s。" % hints if hints else ""
     prompt = _PROMPT.format(
         name=name, persona=persona, context=context, state=state,
+        time_conduct=_tp.time_conduct_block(now),
         tone=_TONE.get(kind, _TONE["missing"]))
     try:
         fn = llm_fn or llm.generate
         raw = fn(prompt, max_tokens=120, temperature=0.8, timeout=25)
         text = _clean(raw)
-        if not _unusable(text):
+        if not _unusable(text, now):
             return text, True
         # 不合格就收紧要求重来一次：刚才那条是在解释怎么写，不是在说话
         raw = fn(prompt + "\n\n（只输出那一句话本身。不要分析、不要解释、"
                           "不要编号或列表，不要提任何要求。）",
                  max_tokens=120, temperature=0.6, timeout=25)
         text = _clean(raw)
-        if not _unusable(text):
+        if not _unusable(text, now):
             return text, True
     except Exception:
         pass

@@ -141,3 +141,21 @@ def test_fabrication_falls_back_to_plain(tmp_path):
     assert "我最近" not in got["text"] and not proactive._fabrication(got["text"])
     assert "章鱼小丸子" in got["text"], got["text"]
     c.close()
+
+
+def test_proactive_blocks_bedtime_talk_in_daytime(tmp_path):
+    """v42：主动消息没有对方本轮输入可参照，白天催睡一律回退兜底。"""
+    c = _db(tmp_path)
+    seen = {}
+
+    def llm(prompt, **kwargs):
+        seen["prompt"] = prompt
+        return "要不要先睡啦，明天再聊～"
+
+    text, ok = proactive.compose(c, {"kind": "missing", "topic": "章鱼小丸子"},
+                                 llm_fn=llm, now=_DAY)
+    assert ok is False
+    assert "不是睡觉时间" in seen["prompt"]
+    assert "睡" not in text and "明天再聊" not in text
+    assert "章鱼小丸子" in text
+    c.close()

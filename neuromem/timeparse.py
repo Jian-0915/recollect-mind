@@ -190,3 +190,62 @@ def parse_range(text, base=None):
         return (_dstr(datetime(y, mth, 1)), _dstr(_month_end(y, mth)))
 
     return None
+
+
+# ---------------- 时段行为（v42） ----------------
+# 时间锚点只告诉模型「现在几点」，没告诉它「这个点该说什么话」。实测 2026-11-19
+# 上午 08:25 / 08:41，prompt 里明明写着「上午 08:26」，她照旧从记忆里的「睡前读书 /
+# 晚安」推出一句「要不要先睡啦，明天再聊～」。所以把时段行为单独做成一块权威指令，
+# 并提供程序侧检测，防止模型依然照抄旧习惯。
+
+_BEDTIME_FROM = 22   # 含
+_BEDTIME_TO = 5      # 不含；与 prompts._now_block 的「深夜」边界一致
+
+# 只匹配「催对方现在去睡 / 结束对话」，不碰「睡得怎么样」「昨晚睡不好」这类
+# 正当提及睡眠的句子，也不碰「我想起你上次说的睡前读书」。
+_BEDTIME_TALK_RE = re.compile(
+    r"(要不要(先)?睡|先睡(吧|啦|了|咯|喽)|快(去)?睡(吧|啦|了)?|早点(儿)?睡|"
+    r"去睡(吧|啦|了|咯|喽)|睡吧|睡啦|睡觉吧|明天再聊|晚安|"
+    r"困(了)?(就|那就|就先)?睡|是不是困(了|糊涂)|困糊涂了?)")
+
+
+def period_of(dt):
+    """与 prompts._now_block 共用的时段标签，避免两处边界漂移。"""
+    h = dt.hour
+    if 5 <= h < 11:
+        return "上午"
+    if 11 <= h < 13:
+        return "中午"
+    if 13 <= h < 18:
+        return "下午"
+    if 18 <= h < 22:
+        return "晚上"
+    return "深夜"
+
+
+def bedtime_ok(now=None):
+    """此刻说「去睡吧 / 晚安」合不合时宜。"""
+    dt = now or datetime.now().astimezone()
+    return dt.hour >= _BEDTIME_FROM or dt.hour < _BEDTIME_TO
+
+
+def has_bedtime_talk(text):
+    """这句话是不是在催对方睡觉 / 结束对话。"""
+    return bool(_BEDTIME_TALK_RE.search(str(text or "")))
+
+
+def time_conduct_block(now=None):
+    """注入 prompt 的时段行为指令；不传 now 时取本机当前时间。"""
+    dt = now or datetime.now().astimezone()
+    period = period_of(dt)
+    if bedtime_ok(dt):
+        return ("【此刻可以自然提睡觉】\n现在是%s %02d:%02d。按气氛自然说晚安就行，"
+                "但别反复催。" % (period, dt.hour, dt.minute))
+    return ("【此刻的说话时段（程序已核对，必须照做）】\n"
+            "现在是%s %02d:%02d，不是睡觉时间。**不许**说「要不要先睡 / 快去睡 / "
+            "早点休息 / 晚安 / 明天再聊 / 是不是困了」这类催睡、收尾的话；"
+            "早上就自然说早上好，白天就顺着当前的事聊。\n"
+            "记忆里出现「晚安 / 睡前 / 昨晚 / 睡眠」是**过去发生过的事**，"
+            "不能拿来当作现在该睡觉的依据。\n"
+            "只有对方这一轮自己说困 / 想睡 / 要休息，才可以顺着他提睡觉。"
+            % (period, dt.hour, dt.minute))

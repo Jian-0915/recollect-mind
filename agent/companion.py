@@ -19,9 +19,12 @@ import time
 from collections import deque
 from pathlib import Path
 
+from datetime import datetime
+
 from neuromem import config, db, identity, llm, persona_card
 from neuromem import motivation as nm_motivation
 from neuromem import store as nm_store
+from neuromem import timeparse as _tp
 from neuromem.brain import Brain
 
 from . import prompts
@@ -770,6 +773,31 @@ class CompanionAgent:
             return reply, [], False, False
         return _safe(trim_reply(reply, bad, ctx, text)), [], False, True
 
+    def _time_safe_reply(self, reply, user_text="", now=None):
+        """白天拦掉「要不要先睡 / 晚安 / 明天再聊」；对方自己提困时不干预。
+
+        模型即使看到时段指令，也可能照抄记忆里的睡前习惯（实测 08:25 / 08:41）。
+        出口再按程序切一次：只删违规分句，保留其余原话；整句都违规时给一句
+        符合当前时段的安全回应。返回 (reply, 是否改过)。
+        """
+        if _tp.bedtime_ok(now):
+            return reply, False
+        if any(w in str(user_text or "") for w in
+               ("困", "想睡", "要睡", "睡觉", "晚安", "休息")):
+            return reply, False
+        if not _tp.has_bedtime_talk(reply):
+            return reply, False
+        parts = re.split(r"(?<=[，,。！？!?；;～~])", reply or "")
+        kept = [p for p in parts if not _tp.has_bedtime_talk(p)]
+        out = "".join(kept).strip().rstrip("，,、 ")
+        if out and out[-1] not in "。！？!?～~":
+            out += "。"
+        if not out:
+            period = _tp.period_of(now or datetime.now().astimezone())
+            out = ("早上好呀，想聊点什么？" if period == "上午"
+                   else "嗯，我在呢，想聊点什么？")
+        return out, True
+
     # ---------------- 一轮真实对话 ----------------
     def step(self, text):
         text = str(text or "").strip()
@@ -878,6 +906,8 @@ class CompanionAgent:
             reply = shape_sulk(reply, tone, prev=_last_agent_reply(self.history),
                                allow_q=not (sulk_ctx or {}).get("active"))
         reply = _avoid_repeat(reply, self.history, tone)
+        # v42：时段兜底——提示词已约束过，出口再拦一次，防止照抄记忆里的睡前习惯。
+        reply, time_fixed = self._time_safe_reply(reply, text)
 
         facts = (normalize_remember(out.get("remember"), reply, text)
                  if self.brain else [])
@@ -940,6 +970,7 @@ class CompanionAgent:
             "think": think,
             "parse_retried": parse_retried, "parse_retry_ok": parse_retry_ok,
             "repeat_retried": repeat_retried,
+            "time_fixed": time_fixed,
             "remember_fallback": fallback_on,
             "remember": [f for f, _ in facts], "remembered_ids": remembered_ids,
             "remember_added": added, "remember_deduped": deduped,
