@@ -6,8 +6,8 @@ import json
 
 import pytest
 
-from neuromem import (autoresearch as ar, config, knowledge, promise,
-                      sourceguard)
+from neuromem import (autoresearch as ar, config, intent, knowledge,
+                      promise, sourceguard)
 
 
 @pytest.fixture
@@ -184,3 +184,42 @@ def test_open_topic_scan_skips_private_and_known(kb, monkeypatch):
                         lambda: ["我女朋友的住址在哪", "乌江寨在哪"])
     out = ar.tick_once(provider=FakeProvider())
     assert out["queued"] == 0
+
+
+# --- v46 真实对话回归：「她答应了却一直没查」----------------------------
+
+def test_real_reply_promises_are_recognized():
+    """2026-11-19 实测她连说四轮的承诺话术，旧正则全都漏。"""
+    real_replies = [
+        "有呀～不过具体景点我得先查查才能给你准确的信息。你先说说想去哪种？",
+        "两天刚好呀～那我按两天给你找条顺的自驾线。你稍等我查查，查到就发你～",
+        "还在查呢～我得把开车时间捋清楚才能给你准信，查到就第一时间发你～",
+        "开车自驾逛贵州，这个想法不错～不过我得先查查才能给你准信。",
+    ]
+    for r in real_replies:
+        assert promise.has_promise(r), r
+
+
+def test_real_spoken_questions_extract_topic():
+    """真实口语问句必须能抽出主题，否则 F5 白跑。"""
+    assert intent.extract_info_query("那有没有其他贵州的景点推荐呢") == "贵州景点"
+    assert intent.extract_info_query("贵州好玩的地方有哪些") == "贵州好玩"
+
+
+def test_promised_topic_backtracks_history_when_turn_is_short(kb):
+    """本轮只回「就两天」，主题在上文——不回溯就排不进队列（本次根因）。"""
+    hist = [
+        {"role": "user", "text": "那有没有其他贵州的景点推荐呢"},
+        {"role": "user", "text": "我想看适合开车游玩的地方，自己开车逛逛"},
+        {"role": "user", "text": "就两天"},
+    ]
+    reply = "两天刚好呀～我按两天给你找条顺的自驾线。你稍等我查查，查到就发你～"
+    tid = ar.enqueue_promise("就两天", reply, (), "turn-real", history=hist)
+    assert tid > 0
+    assert knowledge.pending_research(kb)[0]["entity"] == "贵州景点"
+
+
+def test_promised_topic_short_turn_no_history_stays_empty(kb):
+    """没有上文也没主题时宁可不查，不能拿「就两天」当检索词。"""
+    reply = "你稍等我查查，查到就发你～"
+    assert ar.enqueue_promise("就两天", reply, ()) == 0

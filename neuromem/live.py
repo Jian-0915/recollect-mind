@@ -238,9 +238,19 @@ def turn(text):
                         text, private_terms=_pt, source_event=source)
                     # v45：她说了「我去查查」就排进待查队列，由常驻循环兑现——
                     # 不需要对方再发一句话（不走被动路径）。
+                    # v46：本轮常只有「就两天」这种短句，主题在上文，传最近
+                    # 几轮用户原话让 promised_topic 回溯，否则承诺照样漏。
+                    try:
+                        _hist = [
+                            h for h in (_agent.history if _agent else ())
+                            if (h or {}).get("role") != "agent"
+                            and str((h or {}).get("text") or "").strip()
+                        ][-5:]
+                    except Exception:
+                        _hist = ()
                     _autoresearch.enqueue_promise(
                         text, row.get("reply") or "", private_terms=_pt,
-                        source_event=source)
+                        source_event=source, history=_hist)
             except Exception:
                 pass
         return {

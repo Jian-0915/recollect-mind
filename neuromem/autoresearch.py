@@ -219,16 +219,18 @@ def observe(text: str, private_terms=(), source_event: str = "", provider=None,
 
 
 def enqueue_promise(user_text: str, reply: str, private_terms=(),
-                    source_event: str = "") -> int:
+                    source_event: str = "", history=()) -> int:
     """她说「我去查查」→ 排进待查队列。不做网络、不阻塞对话。
 
     live.py 在每轮回复后调用。整段包 try：兑现承诺的副作用绝不能影响对话。
+    history 是最近几轮用户原话——本轮只回「就两天」时靠它回溯主题。
     """
     if not enabled():
         return 0
     try:
         from . import promise as _promise
-        topic = _promise.promised_topic(user_text, reply, private_terms)
+        topic = _promise.promised_topic(
+            user_text, reply, private_terms, history=history)
         if not topic:
             return 0
         conn = knowledge.connect()
