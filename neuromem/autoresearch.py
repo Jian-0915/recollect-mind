@@ -131,31 +131,6 @@ def should_search(kb_conn, now: datetime | None = None) -> tuple[bool, str]:
     return True, "可以查"
 
 
-def status(kb_conn=None) -> dict:
-    """给前端看的状态：开关、今日次数、最近时间。"""
-    own = kb_conn is None
-    conn = kb_conn or knowledge.connect()
-    try:
-        now = _now()
-        since = (now - timedelta(days=1)).isoformat()
-        return {
-            "enabled": enabled(),
-            "daily_cap": config.AUTORESEARCH_DAILY,
-            "gap_min": config.AUTORESEARCH_GAP_MIN,
-            "today_count": knowledge.autoresearch_count_since(conn, since),
-            "last_at": knowledge.autoresearch_last_at(conn),
-            "brief": knowledge.brief_stats(conn),
-        }
-    except Exception:
-        return {"enabled": enabled(), "daily_cap": config.AUTORESEARCH_DAILY,
-                "gap_min": config.AUTORESEARCH_GAP_MIN,
-                "today_count": 0, "last_at": "",
-                "brief": {"total": 0, "pending": 0}}
-    finally:
-        if own and conn is not None:
-            conn.close()
-
-
 def _run_once(text: str, private_terms, source_event: str, provider=None,
               generate_fn=None):
     """后台真正执行的一次自主查询。任何异常都吞掉并写审计，绝不影响对话。
@@ -243,12 +218,207 @@ def observe(text: str, private_terms=(), source_event: str = "", provider=None,
     return None
 
 
+def enqueue_promise(user_text: str, reply: str, private_terms=(),
+                    source_event: str = "") -> int:
+    """她说「我去查查」→ 排进待查队列。不做网络、不阻塞对话。
+
+    live.py 在每轮回复后调用。整段包 try：兑现承诺的副作用绝不能影响对话。
+    """
+    if not enabled():
+        return 0
+    try:
+        from . import promise as _promise
+        topic = _promise.promised_topic(user_text, reply, private_terms)
+        if not topic:
+            return 0
+        conn = knowledge.connect()
+        try:
+            tid = knowledge.enqueue_research(
+                conn, entity=topic, reason="她答应去查", source_event=source_event)
+            if tid:
+                _wake.set()   # 唤醒常驻循环，尽快兑现，不等下一轮对话
+            return tid
+        finally:
+            conn.close()
+    except Exception:
+        return 0
+
+
+# --- 常驻循环（v45）：不以对方说话为触发条件 -------------------------------
+_stop = threading.Event()
+_wake = threading.Event()
+_thread: threading.Thread | None = None
+_loop_lock = threading.Lock()
+
+
+def _open_topics(main_conn=None) -> list[str]:
+    """只读主库拿「没聊完的话题」，绝不写主库。"""
+    own = main_conn is None
+    conn = main_conn
+    try:
+        if own:
+            from . import db
+            conn = db.connect()
+        from . import companion as _companion
+        return [str(x)[:60] for x in (_companion.state(conn).get("open_topics") or [])]
+    except Exception:
+        return []
+    finally:
+        if own and conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _enqueue_open_topics(conn, private_terms=()) -> int:
+    """从没聊完的话题里挑像「外部事实」的入队。私人话题抽不出主题就跳过。"""
+    from . import intent as _intent
+    n = 0
+    for topic in _open_topics()[:5]:
+        try:
+            q = _intent.extract_info_query(topic, private_terms)
+            ents = _intent.extract_entities(topic, private_terms)
+            entity = str(q or (ents[0] if ents else "")).strip()
+            if not (2 <= len(entity) <= 16):
+                continue
+            if knowledge.has_knowledge(conn, entity):
+                continue
+            if knowledge.enqueue_research(conn, entity=entity,
+                                          reason="没聊完的话题"):
+                n += 1
+        except Exception:
+            continue
+    return n
+
+
+def tick_once(*, provider=None, generate_fn=None) -> dict:
+    """跑一轮常驻循环：兑现队列里的承诺 + 扫一次没聊完的话题。
+
+    返回统计供测试与审计。任何异常都吞掉——后台任务绝不能影响对话。
+    """
+    if not enabled():
+        return {"ran": False, "reason": "自主查询已关闭"}
+    if not _exec_lock.acquire(blocking=False):
+        return {"ran": False, "reason": "上一轮查询还在跑"}
+    out = {"ran": True, "queued": 0, "searched": 0, "hits": 0, "skipped": 0}
+    conn = None
+    try:
+        from . import research as _research
+        conn = knowledge.connect()
+        if config.AUTORESEARCH_TOPIC_SCAN:
+            from .research import private_terms_from_db
+            try:
+                out["queued"] = _enqueue_open_topics(
+                    conn, private_terms_from_db())
+            except Exception:
+                pass
+        tasks = knowledge.pending_research(conn, config.AUTORESEARCH_BACKLOG_MAX)
+        for t in tasks:
+            ok, why = should_search(conn)
+            if not ok:
+                out["skipped"] += 1
+                knowledge.bump_research(conn, t["id"])
+                continue
+            try:
+                result = _research.research(
+                    t["entity"], kb_conn=conn,
+                    private_terms=(),
+                    provider=provider, max_results=3, force=True,
+                    generate_fn=generate_fn)
+                hit = len(result.sources)
+                knowledge.log_autoresearch(
+                    conn, entity=t["entity"], query=result.query or t["entity"],
+                    reason=t.get("reason") or "待查队列", hit_count=hit,
+                    status="ok" if hit else "empty",
+                    source_event=t.get("source_event") or "")
+                if hit:
+                    brief = _research.summarize_discovery(
+                        t["entity"], result.sources, generate_fn=generate_fn)
+                    if brief:
+                        knowledge.add_brief(
+                            conn, entity=t["entity"], text=brief,
+                            sources=[{"title": s.title, "url": s.url}
+                                     for s in result.sources[:3]])
+                    out["hits"] += 1
+                knowledge.mark_research(conn, t["id"])
+                out["searched"] += 1
+            except Exception:
+                tries = knowledge.bump_research(conn, t["id"])
+                if tries >= 3:
+                    knowledge.mark_research(conn, t["id"], status="failed")
+                out["skipped"] += 1
+        return out
+    except Exception:
+        return out
+    finally:
+        if conn is not None:
+            try:
+                conn.close()
+            except Exception:
+                pass
+        _exec_lock.release()
+
+
+def _loop():
+    while not _stop.wait(max(0.1, config.AUTORESEARCH_TICK_MIN) * 60):
+        _wake.wait(2.0)   # 承诺入队后短暂 coalesce，避免连着查同一批
+        _wake.clear()
+        try:
+            tick_once()
+        except Exception:
+            pass
+
+
 def start():
-    """占位：F5 的触发挂在对话主链路（observe），无需常驻线程。
-    保留此接口与 autoevolve.start() 对称，供统一启停调用。"""
-    return enabled()
+    """启动后台常驻循环：兑现承诺 + 定期扫没聊完的话题。
+
+    原来只是占位（触发挂在对话后），v45 起真正起线程——她不再等对方说话。
+    """
+    global _thread
+    if not enabled():
+        return False
+    if _thread and _thread.is_alive():
+        return False
+    _stop.clear()
+    _wake.set()   # 启动时先跑一轮，把重启前排的队兑现掉
+    _thread = threading.Thread(target=_loop, name="neuromem-autoresearch-loop",
+                               daemon=True)
+    _thread.start()
+    return True
 
 
 def stop():
-    """运行期关闭（幂等）。"""
+    """运行期关闭（幂等）：停线程 + 关开关。"""
+    _stop.set()
+    _wake.set()
     set_enabled(False)
+
+
+def status(kb_conn=None) -> dict:
+    """给前端看的状态：开关、今日次数、最近时间、待查队列。"""
+    own = kb_conn is None
+    conn = kb_conn or knowledge.connect()
+    try:
+        now = _now()
+        since = (now - timedelta(days=1)).isoformat()
+        return {
+            "enabled": enabled(),
+            "loop_alive": bool(_thread and _thread.is_alive()),
+            "tick_min": config.AUTORESEARCH_TICK_MIN,
+            "daily_cap": config.AUTORESEARCH_DAILY,
+            "gap_min": config.AUTORESEARCH_GAP_MIN,
+            "today_count": knowledge.autoresearch_count_since(conn, since),
+            "last_at": knowledge.autoresearch_last_at(conn),
+            "brief": knowledge.brief_stats(conn),
+            "backlog": knowledge.backlog_stats(conn),
+        }
+    except Exception:
+        return {"enabled": enabled(), "daily_cap": config.AUTORESEARCH_DAILY,
+                "gap_min": config.AUTORESEARCH_GAP_MIN,
+                "today_count": 0, "last_at": "",
+                "brief": {"total": 0, "pending": 0},
+                "backlog": {"total": 0, "pending": 0}}
+    finally:
+        if own and conn is not None:
+            conn.close()

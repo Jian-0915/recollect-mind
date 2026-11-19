@@ -225,6 +225,10 @@ AUTORESEARCH_PER_TURN_MAX = int(_env("AUTORESEARCH_PER_TURN_MAX", "4"))  # 一�
 AUTORESEARCH_GAP_MIN = int(_env("AUTORESEARCH_GAP_MIN", "1"))   # 两次查询最小间隔（分钟，仅防抖，不再防打扰）
 AUTORESEARCH_QUIET_FROM = int(_env("AUTORESEARCH_QUIET_FROM", "0"))  # 0==TO → 默认不静默
 AUTORESEARCH_QUIET_TO = int(_env("AUTORESEARCH_QUIET_TO", "0"))
+# v45：不走被动路径。承诺兑现走后台常驻循环，open_topic 也定期补课。
+AUTORESEARCH_TICK_MIN = float(_env("AUTORESEARCH_TICK_MIN", "5"))  # 循环每隔几分钟跑一轮
+AUTORESEARCH_BACKLOG_MAX = int(_env("AUTORESEARCH_BACKLOG_MAX", "3"))  # 一轮最多兑现几条承诺
+AUTORESEARCH_TOPIC_SCAN = os.environ.get("NEUROMEM_AUTORESEARCH_TOPIC_SCAN", "1") != "0"  # 是否扫 open_topic
 
 # --- 陪伴层（2026-11-14）：把认知状态接进提取与表达 ---
 COMPANION_STATE = True          # 情绪 / 自叙事 / 画像 / 会话态进入回答提示词与检索结果

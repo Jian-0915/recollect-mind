@@ -66,6 +66,22 @@ CREATE TABLE IF NOT EXISTS discovery_brief (
   created_at  TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_brief_created ON discovery_brief(created_at DESC);
+
+-- 待查队列（v45）：她许下「我去查查」或发现没聊完的话题时先记在这里，
+-- 由常驻循环异步兑现——不依赖对方再发一句话（不走被动路径）。
+-- status: pending 待兑现 / done 已查过（成功或查空）/ 只增不改以免反复查。
+-- 同样只存独立库：队列是查询意图，不是陪伴记忆。
+CREATE TABLE IF NOT EXISTS research_backlog (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  entity        TEXT NOT NULL DEFAULT '',
+  reason        TEXT NOT NULL DEFAULT '',
+  source_event  TEXT NOT NULL DEFAULT '',
+  status        TEXT NOT NULL DEFAULT 'pending',
+  attempts      INTEGER NOT NULL DEFAULT 0,
+  created_at    TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_backlog_status ON research_backlog(status,id);
+CREATE INDEX IF NOT EXISTS idx_backlog_entity ON research_backlog(entity,created_at);
 """
 
 
@@ -463,6 +479,79 @@ def brief_stats(conn: sqlite3.Connection) -> dict:
         row = conn.execute(
             "SELECT COUNT(*) AS n, SUM(CASE WHEN delivered=0 THEN 1 ELSE 0 END) AS pending "
             "FROM discovery_brief").fetchone()
+        return {"total": int(row["n"] or 0), "pending": int(row["pending"] or 0)}
+    except sqlite3.Error:
+        return {"total": 0, "pending": 0}
+
+
+# --------------------------------------------------------------------------
+# 待查队列（v45）：承诺/未聊完的话题 → 排队 → 常驻循环异步兑现
+# --------------------------------------------------------------------------
+
+def enqueue_research(conn: sqlite3.Connection, *, entity: str, reason: str = "",
+                     source_event: str = "", dedup_hours: int = 48) -> int:
+    """排一个待查主题，返回任务 id；重复或为空返回 0。
+
+    去重按「同一 entity 最近 N 小时已经在队列里 / 已查过」算——她说了十遍
+    「我去查查」也只查一次。队列只存在独立库，绝不写主库。
+    """
+    entity = str(entity or "").strip()[:60]
+    if len(entity) < 2:
+        return 0
+    try:
+        since = (datetime.now(timezone.utc).astimezone()
+                 - __import__("datetime").timedelta(hours=dedup_hours)).isoformat()
+        dup = conn.execute(
+            "SELECT 1 FROM research_backlog WHERE entity=? AND created_at>=? LIMIT 1",
+            (entity, since)).fetchone()
+        if dup:
+            return 0
+        cur = conn.execute(
+            "INSERT INTO research_backlog(entity,reason,source_event,status,attempts,created_at) "
+            "VALUES(?,?,?,'pending',0,?)",
+            (entity, str(reason or "")[:120], str(source_event or "")[:120], _iso_now()))
+        conn.commit()
+        return int(cur.lastrowid or 0)
+    except sqlite3.Error:
+        return 0
+
+
+def pending_research(conn: sqlite3.Connection, limit: int = 5) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id,entity,reason,source_event,attempts,created_at "
+        "FROM research_backlog WHERE status='pending' ORDER BY id ASC LIMIT ?",
+        (int(limit),)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def mark_research(conn: sqlite3.Connection, task_id: int, *, status: str = "done") -> bool:
+    try:
+        conn.execute("UPDATE research_backlog SET status=? WHERE id=?",
+                     (str(status)[:24], int(task_id)))
+        conn.commit()
+        return True
+    except sqlite3.Error:
+        return False
+
+
+def bump_research(conn: sqlite3.Connection, task_id: int) -> int:
+    """查询失败/被闸门挡下时记一次尝试；超过上限就不要反复撞配额。"""
+    try:
+        conn.execute("UPDATE research_backlog SET attempts=attempts+1 WHERE id=?",
+                     (int(task_id),))
+        conn.commit()
+        row = conn.execute("SELECT attempts FROM research_backlog WHERE id=?",
+                           (int(task_id),)).fetchone()
+        return int(row["attempts"] or 0) if row else 0
+    except sqlite3.Error:
+        return 0
+
+
+def backlog_stats(conn: sqlite3.Connection) -> dict:
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending "
+            "FROM research_backlog").fetchone()
         return {"total": int(row["n"] or 0), "pending": int(row["pending"] or 0)}
     except sqlite3.Error:
         return {"total": 0, "pending": 0}

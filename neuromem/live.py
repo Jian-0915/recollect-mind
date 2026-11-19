@@ -232,9 +232,15 @@ def turn(text):
             try:
                 if _autoresearch.enabled():
                     from .research import private_terms_from_db
+                    _pt = private_terms_from_db()
+                    source = str(row.get("turn") or "")[:60]
                     _autoresearch.observe(
-                        text, private_terms=private_terms_from_db(),
-                        source_event=str(row.get("turn") or "")[:60])
+                        text, private_terms=_pt, source_event=source)
+                    # v45：她说了「我去查查」就排进待查队列，由常驻循环兑现——
+                    # 不需要对方再发一句话（不走被动路径）。
+                    _autoresearch.enqueue_promise(
+                        text, row.get("reply") or "", private_terms=_pt,
+                        source_event=source)
             except Exception:
                 pass
         return {

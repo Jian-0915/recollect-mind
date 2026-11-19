@@ -451,6 +451,8 @@ def _build_server(port):
             data = await request.json()
             on = bool((data or {}).get("enabled"))
             ar.set_enabled(on)
+            if on:
+                ar.start()   # 重新打开时确保常驻循环在跑
             return {"ok": True, "enabled": ar.enabled()}
         except Exception as e:
             return {"ok": False, "error": str(e)}

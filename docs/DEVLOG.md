@@ -9,6 +9,43 @@ v12 的机制说明保留在 README.zh.md 的「记忆机制」「L0 固定身�
 
 ---
 
+## v45：「她自己会查」——把台词变成真的后台任务（2026-11-19）
+
+**现象**：用户问「她自己可以实现查询吗，不走被动路径」。
+
+**根因（读代码确认）**：
+- F5 的 `observe()` 只在 `live.py` 每轮对话**结束后**被调用，靠用户这一轮的原话
+  抽实体；没有用户说话 = 没有触发。
+- `autoresearch.start()` 是占位函数，只返回 `enabled()`，没有线程。
+- v44 新增的兜底话术「我去查查再告诉你」只改善了措辞，承诺本身没人兑现——
+  用户一旦不再发话，这句承诺永远是空头支票。这是"被动路径"的具体表现。
+
+**设计选择（用户点的方向）**：兑现承诺 + 没聊完的话题，查到立刻气泡。
+没选「查空重试」——用户没勾，暂不做。
+
+**实现要点**：
+- 独立库加 `research_backlog` 表（knowledge.db，绝不写主库）。承诺识别在
+  `neuromem/promise.py`：只认第一人称明确承诺（「我去查查」「等我去查查再告诉你」），
+  「你去查查吧」这种提议不算；主题从用户问句抽（复用 v44 的 `extract_info_query`），
+  称呼先脱敏，抽不出就放弃——宁可不查也不拿私聊当检索词。
+- `autoresearch.enqueue_promise()` 在 `live.py` 回复后调用，入队后 `_wake.set()`
+  唤醒循环；48 小时同主题去重。
+- 常驻线程 `_loop()` 每 `AUTORESEARCH_TICK_MIN=5` 分钟跑一次 `tick_once()`：
+  兑现队列 + 扫 open_topic。过闸 `should_search()`（200/天、1 分钟间隔），
+  被挡下保留 pending 下次再试；失败累计 3 次标 failed，不无限撞配额。
+  查到写 `discovery_brief`，前端 `pollKnowledgeBrief()` 20 秒轮询直接显示，
+  播报链路无需改动。
+- `api.py` startup 加 `autoresearch.start()`，shutdown 加 stop。
+
+**踩坑**：测试里 monkeypatch `knowledge.connect` 返回共享连接时，生产代码会
+`conn.close()`，测试再读就报 "Cannot operate on a closed database"。沿用项目
+既有的 `_NoClose` 包装模式解决。
+
+**为什么不放主库**：待查队列是查询意图，不是陪伴记忆。守住"独立库"红线，
+测试专门断言主库表结构前后一致、没有 research_backlog。
+
+---
+
 ## v44：她把记住的百科当成了查到的资料（2026-11-19）
 
 **现象**：用户说「它回复的时候使用了不属于知识库的信息」。只读核对主库

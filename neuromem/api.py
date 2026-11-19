@@ -37,6 +37,13 @@ async def _auth_middleware(request, call_next):
 def _startup():
     autoevolve.start()
     proactive.start()
+    autoresearch.start()   # v45：常驻循环兑现「我去查查」承诺 + open_topic 补课
+
+
+@app.on_event("shutdown")
+def _shutdown():
+    autoresearch.stop()
+    proactive.stop()
 
 
 def conn():
@@ -800,6 +807,8 @@ def autoresearch_toggle(p: dict):
     try:
         on = bool((p or {}).get("enabled"))
         autoresearch.set_enabled(on)
+        if on:
+            autoresearch.start()   # 重新打开时确保常驻循环在跑
         return {"ok": True, "enabled": autoresearch.enabled()}
     except Exception as exc:
         return {"ok": False, "error": str(exc)}
