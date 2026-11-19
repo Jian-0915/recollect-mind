@@ -673,6 +673,25 @@ def main():
             pass
     threading.Thread(target=_tts_boot, name="tts-boot", daemon=True).start()
 
+    # v41：把桌面端运行时能力状态注册给 companion——她答「XX 接好了没」时
+    # 用这份权威状态，不再从「阿剑正在给我接入 XX」的记忆里推断成「还没接」。
+    def _cap_status():
+        st = {"tts": "off"}
+        try:
+            from desktop import tts
+            s = tts.status() or {}
+            if s.get("ready") or s.get("available") or s.get("ok"):
+                st["tts"] = "ready"
+        except Exception:
+            pass
+        st["notify"] = "ready"       # Windows 原生通知，失败降级气球但能力在
+        return st
+    try:
+        from neuromem import companion as _comp
+        _comp.set_capability_status_provider(_cap_status)
+    except Exception:
+        pass
+
     api = _Api(port)
     window = webview.create_window(
         PRODUCT_TITLE,

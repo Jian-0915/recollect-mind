@@ -281,19 +281,25 @@ def build_knowledge_block(hits):
 
 def build_prompt(pack, user_text, history, counterpart="用户",
                  fact_guard=False, now=None, sulk=None, provoke=0.0,
-                 knowledge_block=""):
-    """接记忆的正式通道：身份 → 时间 → 候选 → 状态 → 最近对话 → 本轮输入。
+                 knowledge_block="", capability_block=""):
+    """接记忆的正式通道：身份 → 时间 → 能力 → 候选 → 状态 → 最近对话 → 本轮输入。
 
     fact_guard=True 时切换到带 claims 的契约与「禁止补充细节」硬规则，
     专供 A/B 隔离变量；默认 False 保持旧提示词一字不变。
     now 可注入当前时间（测试用）；None 时取本机时间。
     sulk 为 {"active": True, "temper": 0.x, "person": "..."} 时注入冷战脸色；
     provoke > 0 时注入「这一轮被戳到」；两者都没有时提示词与旧版一字不差。
+    capability_block 为 v41 的已接入能力清单，放在候选记忆之前——让她先看能力
+    状态再看记忆，避免从「正在接入 XX」的历史里推断出「我还没有 XX」。
     """
     ctx = pack.render() if pack is not None else ""
     parts = [
         SYSTEM_GUARDED if fact_guard else SYSTEM,
         _now_block(now),
+    ]
+    if capability_block:
+        parts.append(capability_block)
+    parts += [
         "【本轮大脑上下文（候选未采用，需自己判断）】\n" + ctx,
         "【刚才的对话（用来理解指代、承接语气；不是回答概括性问题的依据）】\n"
         + _history_text(history),
@@ -313,17 +319,23 @@ def build_prompt(pack, user_text, history, counterpart="用户",
 
 
 def build_prompt_no_brain(identity_block, user_text, history, counterpart="用户",
-                          persona_block="", now=None, knowledge_block=""):
+                          persona_block="", now=None, knowledge_block="",
+                          capability_block=""):
     """对照组：同一份 L0 + 最近原文，但没有候选记忆、情绪、关系与插件。
 
     v14：人设段自带宪法底线，设置后人设整体替代单独的 identity_block，
     保证 A/B 两边拿到完全相同的人格设定（公平对照的前提）。
     now 可注入当前时间（测试用）；None 时取本机时间。
     knowledge_block 为 F5 自主查来的资料；不传则提示词与旧版一字不差。
+    capability_block 为 v41 已接入能力清单；不传则与旧版一字不差。
     """
     parts = [
         NO_BRAIN_SYSTEM,
         _now_block(now),
+    ]
+    if capability_block:
+        parts.append(capability_block)
+    parts += [
         persona_block or identity_block or "（固定身份未设定）",
         "【最近对话原文】\n" + _history_text(history),
     ]

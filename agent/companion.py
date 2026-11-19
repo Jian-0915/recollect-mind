@@ -51,6 +51,27 @@ def _knowledge_block_for(text):
     except Exception:
         return ""
 
+
+# v41：已接入能力清单。桌面壳启动时可注册一个状态提供者（tts/notify 等运行时
+# 状态）；没注册时只列核心能力。每次对话实时收集，功能开关变化能立即反映。
+_capability_status_provider = None
+
+
+def set_capability_status_provider(fn):
+    """桌面壳注入运行时能力状态：fn() -> {"tts": "ready"|"off", ...}。"""
+    global _capability_status_provider
+    _capability_status_provider = fn
+
+
+def _capability_block():
+    """收集当前已接入能力并拼成 prompt 块；出错返回空串，保持向后兼容。"""
+    try:
+        from neuromem import capabilities as _caps
+        status = _capability_status_provider() if _capability_status_provider else None
+        return _caps.render_block(status_map=status)
+    except Exception:
+        return ""
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 LAB_DB = BASE_DIR / "data" / "agent_lab.db"
 LAB_TRACE = BASE_DIR / "data" / "agent_lab.trace.jsonl"
@@ -778,13 +799,17 @@ class CompanionAgent:
         # F5：把她自己查到、且和本轮相关的资料注入。只读独立知识库，
         # 查不到返回空串 → prompt 与旧版一字不差（向后兼容）。
         _kb_block = _knowledge_block_for(text)
+        # v41：已接入能力清单——权威系统状态，与候选记忆分开注入。
+        _cap_block = _capability_block()
         prompt = (prompts.build_prompt(pack, text, self.history, self.counterpart,
                                        fact_guard=guard_on, sulk=sulk_ctx,
-                                       provoke=provoke, knowledge_block=_kb_block)
+                                       provoke=provoke, knowledge_block=_kb_block,
+                                       capability_block=_cap_block)
                   if self.brain else
                   prompts.build_prompt_no_brain(
                       self.identity_block, text, self.history, self.counterpart,
-                      self.persona_block, knowledge_block=_kb_block))
+                      self.persona_block, knowledge_block=_kb_block,
+                      capability_block=_cap_block))
         # 「我上一句说什么」答案唯一：把原话钉进提示词，模型不许再自己挑。
         if _is_last_utterance_query(text):
             _lu = _last_user_utterance(self.history, self.counterpart)
