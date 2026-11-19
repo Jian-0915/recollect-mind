@@ -68,3 +68,17 @@ def test_refine_intent_degrades_on_exception():
         raise RuntimeError("llm down")
     out = intent.refine_intent(i, "乌江寨是什么地方", llm=boom)
     assert out.query == original
+
+
+def test_extract_strips_spoken_prefix_before_place_suffix():
+    """2026-11-19 回归：口语前缀不能被地名后缀路径吞进实体。
+
+    真实对话「你知道世界第一高桥在哪里吗」曾被抽成「你知道世界第一高桥」，
+    「上周去了青岛」被抽成整句，拿去查必然 empty，F5 白跑。
+    """
+    assert intent.extract_entities("你知道世界第一高桥在哪里吗") == ["世界第一高桥"]
+    assert intent.extract_entities("世界第一高桥在哪里") == ["世界第一高桥"]
+    assert intent.extract_entities("上周去了青岛") == ["青岛"]
+    # 回归：原本就该对的别弄坏
+    assert intent.extract_entities("今天去了乌江寨玩") == ["乌江寨"]
+    assert intent.extract_entities("乌江寨是什么地方") == ["乌江寨"]

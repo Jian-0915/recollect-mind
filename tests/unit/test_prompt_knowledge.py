@@ -21,9 +21,9 @@ def test_knowledge_block_marks_source():
 
 
 def test_build_prompt_without_knowledge_unchanged():
-    """不注入时，提示词里没有知识块——保证旧行为一字不差。"""
+    """不注入时，提示词里没有「知识块」整段（能力认知那句是常驻的，不算知识块）。"""
     p = prompts.build_prompt(None, "你好", [], knowledge_block="")
-    assert "你自己查到的" not in p
+    assert "【你自己查到的资料（不是对方说过的" not in p
 
 
 def test_build_prompt_with_knowledge():
@@ -35,10 +35,8 @@ def test_build_prompt_with_knowledge():
     assert "乌江寨好玩吗" in p
 
 
-def test_knowledge_block_for_no_entity_is_empty(monkeypatch):
-    """没有明确实体时返回空串，不查库、不注入。"""
-    calls = []
-    monkeypatch.setattr(companion, "_knowledge_block_for",
-                        lambda t: calls.append(t) or "")
-    assert companion._knowledge_block_for("今天心情不错") == ""
-    assert calls == ["今天心情不错"]
+def test_system_teaches_search_capability():
+    """她不能再说「我没有搜索功能」——SYSTEM / NO_BRAIN 都要有能力认知。"""
+    assert "没有搜索功能" in prompts.SYSTEM        # 作为反面禁令出现
+    assert "自己去查" in prompts.SYSTEM
+    assert "没有搜索功能" in prompts.NO_BRAIN_SYSTEM
