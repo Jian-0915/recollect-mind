@@ -9,6 +9,39 @@ v12 的机制说明保留在 README.zh.md 的「记忆机制」「L0 固定身�
 
 ---
 
+## v43：「关闭按钮偶发失灵」——点到的是 SVG 的 <path>（2026-11-19）
+
+**现象**：用户截图「她知道了什么」抽屉，说关闭按钮偶发性点不动、关不掉面板。
+
+**根因**：v37 把抽屉移出了 `.toast-wrap`（修了 pointer-events:none 吞点击），但
+关闭监听写的是 `event.target.hasAttribute("data-close")`。按钮长这样：
+
+```html
+<button class="icon-btn" data-close>
+  <svg ...><path d="M6 6l12 12M18 6L6 18"></path></svg>
+</button>
+```
+
+点到 × 的**线条**时，`event.target` 是 `<path>`；点到按钮**空白处**（四个角）时，
+`event.target` 才是 `<button data-close>`。前者不命中 `hasAttribute`，所以"偶发"——
+其实是取决于点在图标的哪一部分。这类 bug 只查 DOM 结构（抽屉已在 toast-wrap 外、
+按钮有 data-close）看不出来，必须看事件目标。
+
+**修法**：
+- `event.target.closest("[data-close]")` 从任意子元素往上找，点到 `<path>`、`<svg>`
+  都能命中按钮。设置页的 scrim / 关闭按钮也走同一份 app.js，一起受益。
+- 连带处理两个 `closest` 引入的边界：①抽屉根节点原本也带 `data-close`，
+  改成 `closest` 后会把面板内任意点击当成关闭 → 移除根节点属性，遮罩点击改用
+  `event.target === layer`；②嵌套弹层里点内层关闭，事件冒泡会让外层也关 →
+  用 `closest(".sheet, .drawer, .overlay")` 只让最近的那一层响应。
+
+**教训**：DOM 里带 SVG 图标的按钮，事件委托一律用 `closest()`，不要用
+`event.target.hasAttribute()`。"偶发性"点击失灵，先怀疑点在子元素的哪一块。
+
+完整套件通过。
+
+---
+
 ## v42：时间注入了，但没变成行为（2026-11-19）
 
 **现象**：用户早上反馈"都早上了，还叫我睡觉，根本没用到时间"。只读查主库

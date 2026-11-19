@@ -35,3 +35,34 @@ def test_drawer_exists_once_and_has_close_target():
     drawer_start = html.find('id="knowledgeDrawer"')
     drawer_block = html[drawer_start:drawer_start + 4000]
     assert "data-close" in drawer_block
+
+
+def test_close_uses_closest_for_svg_child():
+    """× 是 SVG，点到 <path> 时 target 是子元素，必须用 closest 才能命中按钮。
+
+    旧写法 event.target.hasAttribute("data-close") 只在点到按钮空白处生效，
+    点到图标线条就失灵——表现成"偶发性关不掉"。
+    """
+    app = (Path(__file__).resolve().parents[2] / "desktop" / "web"
+           / "assets" / "app.js").read_text(encoding="utf-8")
+    assert 'closest("[data-close]")' in app
+    assert 'hasAttribute("data-close")' not in app
+
+
+def test_drawer_itself_has_no_data_close():
+    """抽屉根元素不能带 data-close，否则点面板内部任意处都会误关。"""
+    html = _html()
+    start = html.find('<aside class="drawer" id="knowledgeDrawer"')
+    assert start != -1
+    open_tag = html[start:html.find(">", start) + 1]
+    assert "data-close" not in open_tag, (
+        "drawer 根节点带 data-close 会让 closest 把面板内点击也当成关闭"
+    )
+
+
+def test_nested_layer_close_does_not_bubble_to_parent():
+    """嵌套弹层：只让最近的那一层响应关闭，点内层不把外层抽屉一起关掉。"""
+    app = (Path(__file__).resolve().parents[2] / "desktop" / "web"
+           / "assets" / "app.js").read_text(encoding="utf-8")
+    assert 'closest(".sheet, .drawer, .overlay")' in app
+    assert "if (owner !== layer) return;" in app

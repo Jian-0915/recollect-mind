@@ -108,9 +108,21 @@
 
   $$(".sheet, .drawer, .overlay").forEach(function (layer) {
     layer.addEventListener("click", function (event) {
-      if (event.target.hasAttribute && event.target.hasAttribute("data-close")) {
+      // 用 closest 而不是 event.target.hasAttribute：关闭按钮里的 × 是 SVG，
+      // 点到 <path>/<svg> 时 target 是子元素，旧写法命中不了 data-close，
+      // 于是"有时点得到、有时点不到"（点到按钮空白处才行）。
+      var closer = event.target && event.target.closest
+        ? event.target.closest("[data-close]") : null;
+      var owner = closer ? closer.closest(".sheet, .drawer, .overlay")
+                         : (event.target === layer ? layer : null);
+      // 只让"最近的那一层"响应：嵌套弹层里点内层关闭，不能把外层一起关掉。
+      if (owner !== layer) return;
+      if (closer) {
         closeLayer(layer);
+        return;
       }
+      // 点遮罩本身关闭；点面板内部（无 data-close 的节点）不算。
+      if (event.target === layer) closeLayer(layer);
     });
   });
 

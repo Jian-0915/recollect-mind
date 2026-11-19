@@ -183,7 +183,9 @@
 <!-- ==================== 外部知识抽屉（她自己查来的东西） ==================== -->
 <!-- 注意：此抽屉必须留在 .toast-wrap 之外。后者 pointer-events:none，
      若把抽屉嵌进去，关闭按钮/搜索/开关会全部收不到点击。 -->
-<aside class="drawer" id="knowledgeDrawer" hidden aria-label="她知道了什么" data-close>
+<!-- 遮罩点击由 app.js 用 event.target === layer 处理；这里不能给 aside 加 data-close，
+     否则 closest() 会把面板内任意点击都当成关闭。关闭只认按钮上的 data-close。 -->
+<aside class="drawer" id="knowledgeDrawer" hidden aria-label="她知道了什么">
   <div class="drawer__panel">
     <div class="drawer__head">
       <div>
