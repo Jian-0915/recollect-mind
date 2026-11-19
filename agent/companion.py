@@ -23,6 +23,7 @@ from datetime import datetime
 
 from neuromem import config, db, identity, llm, persona_card
 from neuromem import motivation as nm_motivation
+from neuromem import sourceguard as _sourceguard
 from neuromem import store as nm_store
 from neuromem import timeparse as _tp
 from neuromem.brain import Brain
@@ -908,6 +909,10 @@ class CompanionAgent:
         reply = _avoid_repeat(reply, self.history, tone)
         # v42：时段兜底——提示词已约束过，出口再拦一次，防止照抄记忆里的睡前习惯。
         reply, time_fixed = self._time_safe_reply(reply, text)
+        # v44：来源兜底——没有资料注入时，不许把参数知识当成查过的强断言说出口。
+        # 放在时段兜底之后：两条兜底都可能重写，先保证不催睡再保证不编造。
+        reply, source_fixed = _sourceguard.guard_reply(
+            reply, knowledge_block=_kb_block, user_text=text)
 
         facts = (normalize_remember(out.get("remember"), reply, text)
                  if self.brain else [])
@@ -970,7 +975,7 @@ class CompanionAgent:
             "think": think,
             "parse_retried": parse_retried, "parse_retry_ok": parse_retry_ok,
             "repeat_retried": repeat_retried,
-            "time_fixed": time_fixed,
+            "time_fixed": time_fixed, "source_fixed": source_fixed,
             "remember_fallback": fallback_on,
             "remember": [f for f, _ in facts], "remembered_ids": remembered_ids,
             "remember_added": added, "remember_deduped": deduped,

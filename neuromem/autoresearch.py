@@ -1,7 +1,10 @@
 """F5：她自己发现缺口、主动去查外部信息。
 
 设计红线（对应 ROADMAP F5 验收）：
-  - 需求驱动：只在对话里出现「有意义的未知实体」时才动，没有明确实体不查。
+  - 需求驱动：对话里出现「有意义的未知实体」，或在问外部信息（「贵州有什么
+    景点」）时才动。后者从问句里提炼脱敏主题词，绝不把整段私聊发出去；
+    这是 2026-11-19 v44 补的第二条路径——旧版只认带地名后缀的专名，
+    问「有什么推荐」查不到，她转头就用参数知识编答案。没有需求不查。
     这是异步后台行为——不弹窗、不占对话、不打断用户，所以 2026-11-19 起
     取消静默时段，每日上限与间隔只作防抖/防配额打爆，不再当防打扰闸门。
   - 可一键关：NEUROMEM_AUTORESEARCH=0 或 runtime_off() 立刻停。
@@ -10,7 +13,7 @@
   - 不污染：查到的东西进独立知识库，绝不写主库 events/concepts。
 
 链路：
-    对话后 observe() → discover() 抽实体并查知识库去重 → should_search() 过闸
+    对话后 observe() → discover() 抽实体 + 问句主题，查知识库去重 → should_search() 过闸
     → 守护线程执行 research.research(force=True) → 写知识库 + 审计日志
 
 本模块所有函数都容忍异常、静默降级——自主获取失败绝不能影响正常对话。
@@ -76,6 +79,22 @@ def discover(text: str, kb_conn, private_terms=()) -> list[dict]:
         except Exception:
             continue
         out.append({"entity": e, "reason": "对话里出现未知实体"})
+
+    # v44：实体路径之外再补一条「信息需求」路径。旧版只认带地名后缀的专名，
+    # 「贵州有什么景点」「这边有哪些好玩的」一句都抽不到，于是模型转头就用
+    # 参数知识编出景点名——用户正是这样发现的（09:03 / 09:26）。
+    try:
+        topic = intent.extract_info_query(text, private_terms)
+    except Exception:
+        topic = ""
+    if topic and 2 <= len(topic) <= 16:
+        try:
+            known = any((topic in str(x["entity"]) or str(x["entity"]) in topic)
+                        for x in out)
+            if not known and not knowledge.has_knowledge(kb_conn, topic):
+                out.append({"entity": topic, "reason": "对话里在问外部信息"})
+        except Exception:
+            pass
     return out
 
 

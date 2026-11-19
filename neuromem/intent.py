@@ -33,8 +33,9 @@ _NOISE_PREFIX_RE = re.compile(
     r"^(今天|昨天|前天|明天|上周|这周|下周|去年|今年|明年|刚才|刚刚|方才|"
     r"现在|此刻|眼下|这会儿|当前|目前|"
     r"我们|你们|他们|她们|我|你|他|她|您|说|聊|谈|知道|听说|记得|告诉|"
-    r"去|到|在|了|的|和|跟|与|把|被|给|也|就|都|还|又|很|太|最|那|这|"
-    r"个|些|提|讲|问|想|要|关于|一下|那个|这个|能|可|否)+")
+    r"去|到|在|了解|了|的|和|跟|与|把|被|给|也|就|都|还|又|很|太|最|那|这|"
+    r"个|些|提|讲|问|想|要|关于|一下|那个|这个|能|可|否|"
+    r"除了|另外|还有|说说|讲讲|看看)+")
 # 注：2026-11-19 补「知道/听说/上周/去年」等口语前缀 —— 真实对话里
 # 「你知道世界第一高桥在哪里吗」被地名后缀路径吞成「你知道世界第一高桥」，
 # 「上周去了青岛」吞成整句，拿这种词去查必然 empty，F5 白跑。
@@ -136,6 +137,58 @@ def extract_entities(text: str, private_terms=()) -> list[str]:
             break
 
     return found
+
+
+# 信息需求句式：对方在问外部世界的情况，而不是提到某个现成实体。
+# F5 旧版只能抽「带地名后缀的专名」，于是「我在想贵州有什么景点」
+# 「这边有哪些好玩的」全都漏掉——转头她就用参数知识编景点来答（v44 实测）。
+_INFO_KINDS = ("是什么地方", "介绍一下", "值得去", "怎么玩", "景点", "景区",
+               "好玩的", "好玩", "推荐", "攻略", "有哪些", "有什么", "在哪里")
+_INFO_RE = re.compile(r"(.{0,16}?)(" + "|".join(_INFO_KINDS) + r")")
+# 只有真在问事才走这条路。「今天去了乌江寨，挺好玩的」是陈述，
+# 实体路径已经能覆盖，别再拿「乌江寨好玩」这种词白查一遍。
+_QUESTION_RE = re.compile(
+    r"[?？]|(?:吗|呢|什么|哪些|哪里|哪儿|怎么|如何|推荐|攻略|介绍一下|值得去)")
+# 问句里顺带出现的「景点/攻略」要并进检索词，单查一个「贵州」太泛。
+_INFO_DETAIL = ("景点", "景区", "攻略", "怎么玩", "值得去", "推荐", "好玩")
+_INFO_TAIL_RE = re.compile(
+    r"(有什么|有哪些|哪些|什么|哪里|哪儿|怎样|怎么样|如何|想|要去|去玩|"
+    r"一下|吗|呢|啊|呀)+$")
+
+
+def extract_info_query(text: str, private_terms=()) -> str:
+    """从「求推荐/求介绍」句式里提炼一个安全的检索主题，不抽到就返回空串。
+
+    只输出主题词（如「贵州景点」），不含人称、称呼、私事——绝不用整段私聊
+    当查询词。这是 F5 的补充入口，实体路径照旧，两者去重后一起查。
+    """
+    s = str(text or "")
+    if not s or not _QUESTION_RE.search(s):
+        return ""
+    m = _INFO_RE.search(s)
+    if not m:
+        return ""
+    head, kind = m.group(1), m.group(2)
+    private = [str(p).strip() for p in (private_terms or ()) if str(p).strip()]
+    for p in private:
+        head = head.replace(p, " ")
+    topic = ""
+    for seg in reversed(re.findall(r"[\u4e00-\u9fffA-Za-z0-9]{2,12}", head)):
+        w = _NOISE_PREFIX_RE.sub("", seg).strip(" 的了在是和跟与之")
+        w = _INFO_TAIL_RE.sub("", w).strip(" 的了在是和跟与之")
+        if (2 <= len(w) <= 8 and w not in _STOP
+                and not _PRIVATE_QUERY_HINT.search(w)
+                and not any(p in w for p in private)):
+            topic = w
+            break
+    if not topic:
+        return ""
+    # 「景点/攻略」这类词本身要带进查询词才有意义；单查「贵州」太泛。
+    for detail in _INFO_DETAIL:
+        if detail in s and detail not in topic and len(topic) + len(detail) <= 12:
+            topic += detail
+            break
+    return topic[:16]
 
 
 def build_intent(text: str, private_terms=(), *, entity: str = "",

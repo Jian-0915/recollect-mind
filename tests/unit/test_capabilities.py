@@ -78,3 +78,10 @@ def test_no_brain_prompt_accepts_capability_block():
         "身份", "世界第一高桥在哪里", [], capability_block=block)
     assert "联网查资料" in p
     assert "已接入的能力" in p
+
+
+def test_capability_block_forbids_memory_wording():
+    """v44：能力是系统状态，不许再说「我记得搜索功能接好了」。"""
+    block = caps.render_block(caps.collect())
+    assert "我记得搜索功能接好了" in block
+    assert "不是记忆" in block

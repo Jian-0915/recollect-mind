@@ -82,3 +82,18 @@ def test_extract_strips_spoken_prefix_before_place_suffix():
     # 回归：原本就该对的别弄坏
     assert intent.extract_entities("今天去了乌江寨玩") == ["乌江寨"]
     assert intent.extract_entities("乌江寨是什么地方") == ["乌江寨"]
+
+
+def test_extract_info_query_question_patterns():
+    """v44：求推荐/求介绍也要能查，不能只认带地名后缀的专名。"""
+    assert intent.extract_info_query(
+        "我在想贵州有什么景点，我想要去游玩一下") == "贵州景点"
+    assert intent.extract_info_query("那除了黄果树瀑布呢，你还有什么推荐") == "黄果树瀑布推荐"
+    assert intent.extract_info_query("我想了解一下青岛攻略") == "青岛攻略"
+
+
+def test_extract_info_query_skips_statements_and_private_terms():
+    """陈述句不查；称呼绝不进查询词。"""
+    assert intent.extract_info_query("今天我去了乌江寨，微微说挺好玩的") == ""
+    q = intent.extract_info_query("微微你知道贵州有什么景点吗", private_terms=["微微"])
+    assert "微微" not in q and "贵州" in q

@@ -137,3 +137,19 @@ def test_observe_noop_without_entity(kb, monkeypatch):
     autoresearch.set_enabled(True)
     monkeypatch.setattr(knowledge, "connect", lambda path=None: kb)
     assert autoresearch.observe("你好呀今天心情不错", sync=True) is None
+
+
+def test_discover_covers_info_need_questions(kb):
+    """v44：问「贵州有什么景点」也要触发查询，不能等她凭印象编。"""
+    found = autoresearch.discover("我在想贵州有什么景点，想要去游玩一下", kb)
+    assert any(x["entity"] == "贵州景点" and "问外部信息" in x["reason"]
+               for x in found)
+
+
+def test_discover_info_need_skips_known_topic(kb):
+    class R:
+        title, url, snippet, request_id = (
+            "贵州景点攻略", "https://g.example", "黄果树瀑布", "r")
+    knowledge.add_results(kb, [R()], embed_text=False)
+    found = autoresearch.discover("贵州有什么景点吗", kb)
+    assert all("贵州景点" not in x["entity"] for x in found)
