@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>系统运行</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("ache.theme");
+      if (!t) t = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
+<link rel="stylesheet" href="assets/tokens.css">
+<link rel="stylesheet" href="assets/ui.css">
+<style>
+/* 系统运行页：只读监控，与管理页(人设设置)区分——冷色标签 + 等宽数字 + 状态灯 */
+.app--runtime { --rt-bg: var(--bg); }
+/* .app 是 height:100vh + overflow:hidden（对话页固定视口）。这里和管理页
+   .settings__rail 一样，把内容区做成可滚动的 flex 子项，否则内容被裁掉滑不动。 */
+.runtime { max-width: 940px; width: 100%; margin: 0 auto; padding: 26px 24px 72px;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+.rt-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-bottom:20px; }
+.rt-head h2 { font: 600 24px/1.3 var(--font-serif); color: var(--ink); margin:0 0 4px; }
+.rt-head p { margin:0; color: var(--ink-3); font-size:13px; }
+.rt-refresh { display:flex; align-items:center; gap:8px; color:var(--ink-3); font-size:12px; }
+.rt-refresh button { font:inherit; cursor:pointer; border:1px solid var(--line-strong);
+  background:var(--surface); color:var(--ink-2); border-radius:8px; padding:5px 12px; }
+.rt-refresh button:hover { background:var(--surface-2); }
+.dot { width:8px; height:8px; border-radius:50%; display:inline-block; background:var(--moss-500); }
+.dot.off { background:var(--clay-400); }
+.dot.warn { background:var(--amber-600); }
+
+.rt-hero { display:grid; grid-template-columns: 1.4fr 1fr; gap:14px; margin-bottom:20px; }
+.rt-card { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:18px 20px; }
+.rt-card h3 { margin:0 0 12px; font:600 15px/1.4 var(--font-sans); color:var(--ink);
+  display:flex; align-items:center; gap:8px; }
+.rt-card h3 .n { font:500 11px/1 var(--font-mono); color:var(--ink-3);
+  background:var(--surface-3); padding:3px 7px; border-radius:20px; }
+.rt-stage-label { font:600 18px/1.4 var(--font-sans); color:var(--clay-700); margin:2px 0 6px; }
+.rt-stage-detail { color:var(--ink-2); font-size:13px; line-height:1.6; }
+.rt-stats { display:grid; grid-template-columns:1fr 1fr; gap:10px 14px; }
+.rt-stat { border-left:2px solid var(--line-strong); padding-left:10px; }
+.rt-stat b { display:block; font:600 20px/1.2 var(--font-mono); color:var(--ink); }
+.rt-stat span { font-size:11px; color:var(--ink-3); }
+
+.rt-section { margin-top:18px; }
+.rt-list { list-style:none; margin:0; padding:0; }
+.rt-item { display:flex; align-items:flex-start; gap:12px; padding:10px 0;
+  border-bottom:1px solid var(--line); }
+.rt-item:last-child { border-bottom:none; }
+.rt-item__main { flex:1; min-width:0; }
+.rt-item__title { font-size:13px; color:var(--ink); line-height:1.5; word-break:break-word; }
+.rt-item__meta { font-size:11px; color:var(--ink-3); margin-top:3px; font-family:var(--font-mono); }
+.rt-badge { flex:none; font:500 11px/1 var(--font-sans); padding:4px 8px; border-radius:20px;
+  border:1px solid var(--line-strong); color:var(--ink-2); background:var(--surface-2); white-space:nowrap; }
+.rt-badge.pending { background:var(--amber-100); border-color:var(--amber-line); color:var(--amber-600); }
+.rt-badge.done { background:var(--moss-100); border-color:var(--moss-500); color:var(--moss-600); }
+.rt-badge.failed { background:var(--rose-100); border-color:var(--rose-line); color:var(--rose-600); }
+.rt-topic { font-size:13px; color:var(--ink-2); padding:7px 0 7px 16px; position:relative; line-height:1.55; }
+.rt-topic::before { content:""; position:absolute; left:2px; top:14px; width:5px; height:5px;
+  border-radius:50%; background:var(--clay-300); }
+.rt-empty { color:var(--ink-3); font-size:13px; padding:10px 0; }
+.rt-note { font-size:11px; color:var(--ink-3); margin-top:10px; line-height:1.6; }
+.rt-err { color:var(--rose-600); font-size:12px; }
+@media (max-width: 680px) { .rt-hero { grid-template-columns:1fr; } }
+</style>
+</head>
+<body class="app app--runtime" data-view="runtime">
+<div class="ambient" aria-hidden="true"></div>
+<header class="topbar">
+  <a class="topbar__back" href="index.html" id="backLink">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 6l-6 6 6 6"></path></svg>
+    <span>对话</span>
+  </a>
+  <h1 class="topbar__title">系统运行</h1>
+  <div class="topbar__actions"><span class="saved" data-state="saved"><span class="saved__dot"></span><span>只读监控</span></span></div>
+</header>
+
+<main class="runtime">
+  <div class="rt-head">
+    <div><h2>此刻在运行什么</h2><p>系统的实时状态一眼可见 · 与人设/记忆管理分开</p></div>
+    <div class="rt-refresh"><span class="dot" id="liveDot"></span><span id="updatedAt">—</span><button type="button" id="refreshBtn">刷新</button></div>
+  </div>
+
+  <div class="rt-hero">
+    <section class="rt-card">
+      <h3>当前阶段 <span class="n" id="stageTag">—</span></h3>
+      <div class="rt-stage-label" id="stageLabel">正在读取…</div>
+      <div class="rt-stage-detail" id="stageDetail"></div>
+      <div class="rt-note" id="arNote"></div>
+    </section>
+    <section class="rt-card">
+      <h3>运行统计</h3>
+      <div class="rt-stats" id="stats"></div>
+    </section>
+  </div>
+
+  <section class="rt-section rt-card">
+    <h3>聊天主题 <span class="n" id="topicCount">0</span></h3>
+    <div id="topics"><div class="rt-empty">读取中…</div></div>
+    <div class="rt-note">这些是她记下的「还没聊完的话题」，也是主动补课时会挑的主题来源。</div>
+  </section>
+
+  <section class="rt-section rt-card">
+    <h3>待查队列 <span class="n" id="backlogCount">0</span></h3>
+    <ul class="rt-list" id="backlog"></ul>
+    <div class="rt-note">她说「我去查查」或发现没聊完的话题时会排进这里，由常驻循环异步兑现；只存独立知识库，不写记忆主库。</div>
+  </section>
+
+  <section class="rt-section rt-card">
+    <h3>播报队列 <span class="n" id="briefCount">0</span></h3>
+    <ul class="rt-list" id="briefs"></ul>
+    <div class="rt-note">已查到并整理成短句、等待在聊天页弹出的内容。本页只读，不会把待播报的消息取走。</div>
+  </section>
+
+  <section class="rt-section rt-card">
+    <h3>最近查询 <span class="n" id="logCount">0</span></h3>
+    <ul class="rt-list" id="log"></ul>
+  </section>
+</main>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { var d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
+  var fetchJSON = function (url) {
+    return fetch(url, { credentials: "same-origin" }).then(function (r) {
+      if (!r.ok) throw new Error("HTTP " + r.status); return r.json();
+    });
+  };
+  var fmtTime = function (iso) {
+    if (!iso || iso.length < 19) return iso || "—";
+    return iso.slice(5, 19).replace("T", " ");
+  };
+
+  function fillStats(d) {
+    var ar = d.autoresearch || {}, kb = d.knowledge || {}, chat = d.chat || {};
+    var bs = kb.backlog_stats || {}, bs2 = kb.brief_stats || {};
+    var cells = [
+      ["自主获取", ar.enabled ? (ar.loop_alive ? "运行中" : "已开启") : "已关闭"],
+      ["今日查询", (ar.today_count != null ? ar.today_count : "—") + "/" + (ar.daily_cap != null ? ar.daily_cap : "—")],
+      ["待查 / 已查", (bs.pending != null ? bs.pending : "—") + " / " +
+        (bs.done != null ? bs.done : "—")],
+      ["待播报", (bs2.pending != null ? bs2.pending : "—")],
+      ["知识条目", (kb.stats && kb.stats.count != null ? kb.stats.count : "—")],
+      ["对话轮数", (chat.turns_stored != null ? chat.turns_stored : "—")]
+    ];
+    $("stats").innerHTML = cells.map(function (c) {
+      return '<div class="rt-stat"><b>' + esc(c[1]) + '</b><span>' + esc(c[0]) + '</span></div>';
+    }).join("");
+    var alive = ar.enabled && ar.loop_alive;
+    $("liveDot").className = "dot" + (!ar.enabled ? " off" : (!alive ? " warn" : ""));
+  }
+
+  function fillStage(d) {
+    var p = d.pipeline || {}, ar = d.autoresearch || {};
+    $("stageTag").textContent = p.stage || "—";
+    $("stageLabel").textContent = p.label || "未知";
+    $("stageDetail").textContent = p.detail || "";
+    $("arNote").textContent = ar.enabled
+      ? ("每 " + (ar.tick_min || "?") + " 分钟扫一轮；最近查询 " + fmtTime(ar.last_at))
+      : "自主获取当前关闭，打开后才会自己去查。";
+  }
+
+  function fillTopics(d) {
+    var list = (d.chat && d.chat.open_topics) || [];
+    $("topicCount").textContent = list.length;
+    $("topics").innerHTML = list.length
+      ? list.map(function (t) { return '<div class="rt-topic">' + esc(t) + '</div>'; }).join("")
+      : '<div class="rt-empty">现在没有未聊完的话题。</div>';
+  }
+
+  function badge(status) {
+    var cls = status === "pending" ? "pending" : (status === "failed" ? "failed" : "done");
+    var label = status === "pending" ? "待查" : (status === "failed" ? "失败" : "已查");
+    return '<span class="rt-badge ' + cls + '">' + label + '</span>';
+  }
+
+  function fillBacklog(d) {
+    var list = (d.knowledge && d.knowledge.backlog) || [];
+    $("backlogCount").textContent = list.length;
+    $("backlog").innerHTML = list.length ? list.map(function (t) {
+      var meta = fmtTime(t.created_at) + " · " + (t.reason || "—") +
+        (t.attempts ? " · 尝试 " + t.attempts + " 次" : "");
+      return '<li class="rt-item">' + badge(t.status) +
+        '<div class="rt-item__main"><div class="rt-item__title">' + esc(t.entity) +
+        '</div><div class="rt-item__meta">' + esc(meta) + '</div></div></li>';
+    }).join("") : '<li class="rt-empty">队列是空的，没有待查主题。</li>';
+  }
+
+  function fillBriefs(d) {
+    var list = (d.knowledge && d.knowledge.briefs) || [];
+    $("briefCount").textContent = list.length;
+    $("briefs").innerHTML = list.length ? list.map(function (b) {
+      var st = b.delivered ? "已弹出" : "待弹出";
+      var meta = fmtTime(b.created_at) + " · " + st +
+        (b.sources && b.sources.length ? " · " + b.sources.length + " 个来源" : "");
+      return '<li class="rt-item"><span class="rt-badge">' + esc(st) + '</span>' +
+        '<div class="rt-item__main"><div class="rt-item__title">' + esc(b.text) +
+        '</div><div class="rt-item__meta">' + esc(meta) + '</div></div></li>';
+    }).join("") : '<li class="rt-empty">还没有查到并整理好的内容。</li>';
+  }
+
+  function fillLog(d) {
+    var list = (d.knowledge && d.knowledge.log) || [];
+    $("logCount").textContent = list.length;
+    $("log").innerHTML = list.length ? list.map(function (g) {
+      var meta = fmtTime(g.created_at) + " · " + (g.reason || "—") +
+        " · 命中 " + (g.hit_count != null ? g.hit_count : "—") +
+        (g.query ? " · " + g.query : "");
+      var cls = g.status === "ok" ? "done" : "";
+      return '<li class="rt-item"><span class="rt-badge ' + cls + '">' +
+        esc(g.status || "—") + '</span><div class="rt-item__main">' +
+        '<div class="rt-item__title">' + esc(g.entity) + '</div>' +
+        '<div class="rt-item__meta">' + esc(meta) + '</div></div></li>';
+    }).join("") : '<li class="rt-empty">还没有查询记录。</li>';
+  }
+
+  function render(d) {
+    if (!d || !d.ok) {
+      $("stageLabel").textContent = "读取失败";
+      $("stageDetail").textContent = (d && d.error) || "接口返回异常";
+      return;
+    }
+    $("updatedAt").textContent = "更新于 " + fmtTime(d.now);
+    fillStats(d); fillStage(d); fillTopics(d);
+    fillBacklog(d); fillBriefs(d); fillLog(d);
+    // 某个子系统坏了就显式提示，不让监控页假装一切正常
+    var errs = [];
+    if (d.autoresearch && d.autoresearch.error) errs.push("自主获取");
+    if (d.knowledge && d.knowledge.error) errs.push("知识库");
+    if (d.chat && d.chat.error) errs.push("聊天状态");
+    if (errs.length) {
+      $("arNote").innerHTML = '<span class="rt-err">部分数据读取失败：' +
+        esc(errs.join("、")) + '</span>';
+    }
+  }
+
+  function load() { fetchJSON("/api/system/runtime").then(render).catch(function (e) {
+    $("stageLabel").textContent = "连接失败";
+    $("stageDetail").textContent = e.message || "无法读取系统状态";
+    $("liveDot").className = "dot off";
+  }); }
+
+  $("refreshBtn").addEventListener("click", load);
+  load();
+  window.setInterval(load, 15000);   // 每 15 秒刷新，实时但不频繁
+})();
+</script>
+</body>
+</html>

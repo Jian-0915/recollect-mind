@@ -32,6 +32,29 @@ _CLAIM_RE = re.compile(
 
 _SENT_SPLIT_RE = re.compile(r"(?<=[，,。！？!?；;～~])")
 
+# v48：资料块只提到 A，模型却展开讲 B/C/D（实测「茅台酒是中国四大名酒之一」
+# → 凭空报出汾酒/泸州老窖/西凤酒的各香型）。抓「X 是……的 / X 则是……」这类
+# 给具体事物下定义的句式主语；若 X 从未在资料、对话、记忆候选里出现过，
+# 就是资料外专名——这种编造一字不差地可被 whitelist 命中，比字面强断言更准。
+# 只在本轮确实注入了资料时启用：没资料时已有强断言兜底，别重复拦。
+_DEFINE_RE = re.compile(
+    r"(?:^|[，,；;。！？!?～~\s])([\u4e00-\u9fff]{2,8}?)"
+    r"(?:呀|呢|吧|哦|啊)?(?:则|也|就)?是(?=[\u4e00-\u9fff])"
+)
+# 这些词作主语是普通口语，不是专名。
+_DEFINE_STOP = frozenset(
+    "这 那 它 他 她 我 你 您 我们 你们 他们 这人 那人 最 更 还 也 就 都 又 很 太 "
+    "关键 重点 问题 原因 办法 结果 意思 情况 事情 东西 玩意 感觉 感觉 其实 确实 "
+    "真的 主要 特别 尤其 比如 例如 首先 然后 而且 不过 所以 因为 当然 可能 应该 "
+    "一次 一样 一种 一个 这就是 那就 现在 今天 明天 昨天 刚才 目前 通常 一般 "
+    "生活 工作 学习 身体 心情 状态 时间 世界 人生 爱情 友情 家人 朋友 "
+    "最出名的 出名的 有名的 出名的 最大的 最好的 最棒的 特别的 特别的 "
+    "关键的 主要的 重要的 有趣的 好玩的 好看的 好吃的 特别的".split()
+)
+# 一个分句里凑够这么多个资料外专名下定义，才认定整段是「资料外科普」。
+# 单个专名不拦：可能是对话里刚聊过、只是没进白名单的正常词。
+_MIN_NOVEL_SUBJECTS = 2
+
 # 这些句式出现时，说明对方在追问信息来源——更不能含糊过去。
 _SOURCE_ASK = ("怎么知道", "怎么知道的", "你查的吗", "自己查的", "真的查过",
                "哪来的", "从哪儿知道", "从哪里知道", "有依据吗", "确定吗")
@@ -62,13 +85,51 @@ def unsourced_parts(reply: str, *, knowledge_block: str = "") -> list[str]:
     return out
 
 
+def unsourced_defined_subjects(reply: str, *, knowledge_block: str = "",
+                               allowed_text: str = "") -> list[str]:
+    """v48：找回答里「被下定义、却从没在任何可信来源出现过」的具体专名。
+
+    allowed_text 应含用户最近几轮原话 + 记忆候选 + 资料块，避免把对方自己
+    提到的东西当编造。只有资料块非空时才检查——配合提示词处理「资料只提了
+    A 的名字，她却展开讲 B/C/D」这种 extrapolation。
+    """
+    if not reply or not knowledge_block:
+        return []
+    # 白名单用字符集合即可：专名若是被提过的词，其字串必然出现在来源里。
+    seen = str(knowledge_block or "") + str(allowed_text or "")
+    out: list[str] = []
+    for m in _DEFINE_RE.finditer(str(reply)):
+        subj = m.group(1)
+        if subj in _DEFINE_STOP or len(subj) < 2:
+            continue
+        if subj in seen:
+            continue
+        # 去掉句首被上一段吞进来的连接词残字（「而且茅台酒」「西凤酒则」）
+        clean = re.sub(r"^(而且|但是|不过|所以|然后|另外|还有|就是|其实|那个|这个|那|这|而|但|又|还|也|就)+", "", subj)
+        if len(clean) < 2 or clean in _DEFINE_STOP or clean in seen:
+            continue
+        if clean not in out:
+            out.append(clean)
+    return out
+
+
 def guard_reply(reply: str, *, knowledge_block: str = "",
-                user_text: str = "") -> tuple[str, bool]:
-    """出口兜底：删掉无来源的强断言分句，保留其余原话。
+                user_text: str = "", allowed_text: str = "") -> tuple[str, bool]:
+    """出口兜底：删掉无来源的强断言 / 资料外专名，保留其余原话。
 
     返回 (新回复, 是否改过)。整句都违规或删完只剩语气词时，换成一句
     诚实承认没查过的话——绝不留下"听起来像查过"的空壳。
+
+    allowed_text：用户最近几轮原话 + 记忆候选，供「资料外专名」检测排除
+    对方自己提过的词；不传也能用，只是白名单窄一些。
     """
+    # 1) 资料外科普：资料只提了 A，却给多个没提过的 B/C/D 下定义。
+    #    这是整段编造，不保留——留一句「我还没查过」比拼凑原话更诚实。
+    novel = unsourced_defined_subjects(
+        reply, knowledge_block=knowledge_block, allowed_text=allowed_text)
+    if len(novel) >= _MIN_NOVEL_SUBJECTS:
+        return _FALLBACK, True
+
     bad = unsourced_parts(reply, knowledge_block=knowledge_block)
     if not bad:
         return reply, False

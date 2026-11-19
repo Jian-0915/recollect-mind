@@ -550,8 +550,49 @@ def bump_research(conn: sqlite3.Connection, task_id: int) -> int:
 def backlog_stats(conn: sqlite3.Connection) -> dict:
     try:
         row = conn.execute(
-            "SELECT COUNT(*) AS n, SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending "
+            "SELECT COUNT(*) AS n, "
+            "SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending, "
+            "SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done, "
+            "SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END) AS failed "
             "FROM research_backlog").fetchone()
-        return {"total": int(row["n"] or 0), "pending": int(row["pending"] or 0)}
+        return {"total": int(row["n"] or 0), "pending": int(row["pending"] or 0),
+                "done": int(row["done"] or 0), "failed": int(row["failed"] or 0)}
     except sqlite3.Error:
-        return {"total": 0, "pending": 0}
+        return {"total": 0, "pending": 0, "done": 0, "failed": 0}
+
+
+# --------------------------------------------------------------------------
+# 系统运行视图（v47）：只读列表，给「系统运行」界面看全貌，不改任何状态。
+# --------------------------------------------------------------------------
+
+def list_backlog(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """待查队列全量（含 done/failed），按 id 倒序，供运行界面看历史。"""
+    try:
+        rows = conn.execute(
+            "SELECT id,entity,reason,source_event,status,attempts,created_at "
+            "FROM research_backlog ORDER BY id DESC LIMIT ?",
+            (min(max(int(limit), 1), 200),)).fetchall()
+        return [dict(r) for r in rows]
+    except sqlite3.Error:
+        return []
+
+
+def list_briefs(conn: sqlite3.Connection, limit: int = 50) -> list[dict]:
+    """全部播报（含已投递），text 截断——界面只做一览，不塞整段草稿。"""
+    try:
+        rows = conn.execute(
+            "SELECT id,entity,substr(text,1,160) AS text,sources,delivered,created_at "
+            "FROM discovery_brief ORDER BY id DESC LIMIT ?",
+            (min(max(int(limit), 1), 200),)).fetchall()
+        out = []
+        for r in rows:
+            d = dict(r)
+            try:
+                import json
+                d["sources"] = json.loads(d.get("sources") or "[]")[:3]
+            except Exception:
+                d["sources"] = []
+            out.append(d)
+        return out
+    except sqlite3.Error:
+        return []

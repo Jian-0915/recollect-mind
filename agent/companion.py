@@ -910,9 +910,18 @@ class CompanionAgent:
         # v42：时段兜底——提示词已约束过，出口再拦一次，防止照抄记忆里的睡前习惯。
         reply, time_fixed = self._time_safe_reply(reply, text)
         # v44：来源兜底——没有资料注入时，不许把参数知识当成查过的强断言说出口。
+        # v48：加 allowed_text——对方最近几轮原话 + 记忆候选，供「资料外专名」
+        # 检测排除对方自己提过的词，避免把她引用的话当编造。
         # 放在时段兜底之后：两条兜底都可能重写，先保证不催睡再保证不编造。
+        _allowed = " ".join(
+            [str(text or "")]
+            + [str(h.get("text") or "") for h in list(self.history)[-6:]]
+            + [str(c.get("gist") or "")
+               for c in (self.last_candidates or []) if isinstance(c, dict)]
+        )
         reply, source_fixed = _sourceguard.guard_reply(
-            reply, knowledge_block=_kb_block, user_text=text)
+            reply, knowledge_block=_kb_block, user_text=text,
+            allowed_text=_allowed)
 
         facts = (normalize_remember(out.get("remember"), reply, text)
                  if self.brain else [])

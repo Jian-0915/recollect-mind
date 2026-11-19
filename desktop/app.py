@@ -410,6 +410,12 @@ def _build_server(port):
         from neuromem import autoresearch as ar
         return {"ok": True, **ar.status()}
 
+    @api_app.get("/api/system/runtime")
+    def _desk_system_runtime():
+        """系统运行界面数据源（只读快照，GET 不消费播报）。"""
+        from neuromem import runtime
+        return runtime.snapshot()
+
     @api_app.get("/api/autoresearch/log")
     def _desk_autoresearch_log(limit: int = 30):
         from neuromem import knowledge as kmod

@@ -186,3 +186,25 @@ def test_frontend_brief_wiring():
     assert "pollKnowledgeBrief" in app
     assert "DeskAPI.autoBrief()" in app
     assert "msg__selfnote" in app
+
+
+def test_draft_thinking_is_stripped_from_brief():
+    """v48：模型把分步草稿当正文吐出时，播报只留口语句，不许草稿进气泡。"""
+    from neuromem import research
+    dirty = ("3.  **Drafting - Attempt 2:**\n"
+             "    哎，我刚才顺手查了下茅台镇，那里有几千家酒厂，整个镇子都飘着酒香。\n"
+             "    *Cr")
+    out = research._clean_discovery_text(dirty)
+    assert "Drafting" not in out and "*Cr" not in out and "**" not in out
+    assert "酒香" in out
+
+
+def test_all_draft_lines_falls_back_to_source():
+    """整段都是草稿时清洗为空，summarize_discovery 走资料首句降级。"""
+    from neuromem import research
+    from neuromem.knowledge import KnowledgeHit
+    hit = KnowledgeHit(1, "茅台镇", "https://x", "几千家酒厂", 0.9, "2026-11-19")
+    out = research.summarize_discovery(
+        "茅台镇", [hit],
+        generate_fn=lambda p: "2. **Review the Materials:**\n  * [1]")
+    assert "Review" not in out and "茅台镇" in out

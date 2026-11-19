@@ -1323,6 +1323,20 @@ def live_status():
     return {"ok": True, **live.status()}
 
 
+@app.get("/api/system/runtime")
+def system_runtime():
+    """系统运行全貌（只读）：待查队列 / 流水线阶段 / 聊天主题 / 播报。
+
+    给独立的「系统运行」界面用，与管理页的数据源分开。GET 不消费播报。
+    """
+    try:
+        from . import runtime
+        return runtime.snapshot()
+    except Exception as exc:
+        return {"ok": False, "error": "%s: %s" % (
+            type(exc).__name__, str(exc)[:200])}
+
+
 @app.post("/api/live/reset")
 def live_reset():
     """丢弃常驻实例；后台改过人设后调一次，下次对话重新读 L0。"""

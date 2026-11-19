@@ -223,3 +223,14 @@ def test_promised_topic_short_turn_no_history_stays_empty(kb):
     """没有上文也没主题时宁可不查，不能拿「就两天」当检索词。"""
     reply = "你稍等我查查，查到就发你～"
     assert ar.enqueue_promise("就两天", reply, ()) == 0
+
+
+def test_backlog_stats_breakdown(kb):
+    """v48：待查/已查/失败分开统计，监控页显示 0/4 而不只是 0。"""
+    knowledge.enqueue_research(kb, entity="主题甲")
+    st = knowledge.pending_research(kb)
+    knowledge.mark_research(kb, st[0]["id"], status="done")
+    knowledge.enqueue_research(kb, entity="主题乙")
+    stats = knowledge.backlog_stats(kb)
+    assert stats["done"] >= 1 and stats["pending"] >= 1
+    assert stats["total"] == stats["done"] + stats["pending"] + stats["failed"]

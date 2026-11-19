@@ -73,6 +73,35 @@ _DISCOVERY_PROMPT = """你是用户的记忆陪伴助手。刚才对话里提到
 """
 
 
+import re as _re
+
+# 模型偶尔把「思考草稿 / 分步计划」当正文吐出来（实测播报里出现
+# `3. **Drafting - Attempt 2:**`、`2. **Review the Materials:**` 等）。
+# 这些不能进「她自己查到的」气泡——对方一眼看出是机器草稿，穿帮。
+_DRAFT_LINE_RE = _re.compile(
+    r"^\s*(?:\d+[\.\)、]|[-*]|\*\*).*?(?:draft|attempt|review|determine|outline|"
+    r"plan|brainstorm|drafting|总结|草稿|第一步|第二步|分析|检查资料)\b.*$",
+    _re.IGNORECASE)
+_MD_NOISE_RE = _re.compile(r"\*\*|^\s*[-*]\s+|^#{1,6}\s+", _re.MULTILINE)
+# 行尾半截的星号标记（「酒香啊。 *Cr」「… *Drafting」），模型生成被截断留下。
+_TRAIL_FRAGMENT_RE = _re.compile(r"\s+\*[A-Za-z]{1,6}\s*$")
+
+
+def _clean_discovery_text(text: str) -> str:
+    """剥掉模型的分步草稿，只留能直接发出去的口语句。"""
+    lines = []
+    for ln in str(text or "").splitlines():
+        if _DRAFT_LINE_RE.match(ln):
+            continue
+        # 「*Cr」「[1]」这种引用占位/半截标记的行也丢掉
+        s = _MD_NOISE_RE.sub("", ln)
+        s = _TRAIL_FRAGMENT_RE.sub("", s).strip()
+        if not s or _re.fullmatch(r"[\[\]\d\s\*\-\.、]+", s):
+            continue
+        lines.append(s)
+    return " ".join(lines).strip()
+
+
 def summarize_discovery(entity: str, hits, *, generate_fn=None) -> str:
     """F5 用：把检索命中整理成一句她的口吻的话。模型不可用则退回资料首句。
 
@@ -93,8 +122,9 @@ def summarize_discovery(entity: str, hits, *, generate_fn=None) -> str:
     if gen is not None:
         try:
             answer = (gen(prompt) or "").strip()
-            if answer:
-                return answer[:300]
+            cleaned = _clean_discovery_text(answer)
+            if cleaned:
+                return cleaned[:300]
         except Exception:
             pass
     # 降级：直接摘第一条资料的标题+摘要，至少让用户看得见查到了什么
